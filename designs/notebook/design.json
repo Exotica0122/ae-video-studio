@@ -1,0 +1,27 @@
+{
+  "id": "notebook",
+  "name": "Paper Notebook",
+  "mood": ["warm", "hand-made", "hopeful"],
+  "tokens": {
+    "palette": {"paper": "#FBF7EF", "ink": "#22304A", "accent": "#FFD84D", "accent2": "#EE7860", "rule": "#DCD3C3", "shade": "#101418"},
+    "type": {
+      "headline": {"font": "Paperlogy-8ExtraBold", "size": 150},
+      "body": {"font": "Paperlogy-5Medium", "size": 100},
+      "emphasis": {"font": "Paperlogy-7Bold", "size": 118},
+      "quote": {"font": "Paperlogy-6SemiBold", "size": 92},
+      "label": {"font": "Paperlogy-7Bold", "size": 64},
+      "scripture": {"font": "MaruBuri-Bold", "size": 128}
+    },
+    "motion": {"in": 0.6, "out": 0.45, "word": 0.35, "rise": 14},
+    "texture": {"noise": 4}
+  },
+  "components": {
+    "caption": {"treatment": "paper-card"},
+    "quote": {"treatment": "paper-card"},
+    "lower-third": {"treatment": "paper-tab"},
+    "title-page": {"treatment": "notebook-page"},
+    "end-card": {"treatment": "notebook-page"}
+  },
+  "grade_hint": "warm-airy",
+  "sfx_hint": ["paper-slide", "page-turn", "marker"]
+}

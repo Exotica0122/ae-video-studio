@@ -1,0 +1,27 @@
+{
+  "id": "cinematic-minimal",
+  "name": "Cinematic Minimal",
+  "mood": ["restrained", "emotional", "premium"],
+  "tokens": {
+    "palette": {"paper": "#0E0F12", "ink": "#F4F1EA", "accent": "#C9A46A", "accent2": "#8FA3B8", "rule": "#3A3D44", "shade": "#0E0F12"},
+    "type": {
+      "headline": {"font": "MaruBuri-SemiBold", "size": 150},
+      "body": {"font": "NanumSquareNeoTTF-bRg", "size": 84},
+      "emphasis": {"font": "NanumSquareNeoTTF-cBd", "size": 84},
+      "quote": {"font": "MaruBuri-Light", "size": 92},
+      "label": {"font": "NanumSquareNeoTTF-cBd", "size": 52},
+      "scripture": {"font": "MaruBuri-Light", "size": 120}
+    },
+    "motion": {"in": 0.8, "out": 0.6, "word": 0.6, "rise": 0},
+    "texture": {"noise": 0}
+  },
+  "components": {
+    "caption": {"treatment": "line-fade"},
+    "quote": {"treatment": "line-fade"},
+    "lower-third": {"treatment": "rule-wipe"},
+    "title-page": {"treatment": "black-frame"},
+    "end-card": {"treatment": "centered-stack"}
+  },
+  "grade_hint": "soft-contrast-warm",
+  "sfx_hint": ["low-whoosh", "soft-hit"]
+}
