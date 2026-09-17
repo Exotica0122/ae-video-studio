@@ -82,6 +82,12 @@ class PlanTest(unittest.TestCase):
         with self.assertRaisesRegex(PlanError, "duplicate voice id 'N1'"):
             load_plan(write_plan(self.root, p))
 
+    def test_rejects_non_numeric_format_width(self):
+        p = base_plan()
+        p["format"]["width"] = "not-a-number"
+        with self.assertRaisesRegex(PlanError, "format.*width.*must be a number"):
+            load_plan(write_plan(self.root, p))
+
 
 if __name__ == "__main__":
     unittest.main()

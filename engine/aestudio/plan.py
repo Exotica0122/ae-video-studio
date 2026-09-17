@@ -108,8 +108,11 @@ def load_plan(path, check_files: bool = True) -> Plan:
     if not isinstance(name, str) or not name:
         c.errors.append("'name' must be a non-empty string")
     f = data.get("format", {})
-    fmt = Format(int(f.get("width", 3840)), int(f.get("height", 2160)), float(f.get("fps", 23.976)),
-                 c.num(f, "duration", "format"))
+    width = c.num(f, "width", "format", 3840, 1)
+    height = c.num(f, "height", "format", 2160, 1)
+    fps = c.num(f, "fps", "format", 23.976, 0.001)
+    duration = c.num(f, "duration", "format")
+    fmt = Format(int(width), int(height), fps, duration)
     if fmt.duration <= 0:
         c.errors.append("format: 'duration' must be > 0")
 
