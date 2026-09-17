@@ -9,4 +9,4 @@ def register(component: str, treatment: str):
     return wrap
 
 
-from . import notebook  # noqa: E402,F401  (registers treatments)
+from . import cinematic, notebook  # noqa: E402,F401  (registers treatments)
