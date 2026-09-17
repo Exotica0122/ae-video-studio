@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-_SKIP = set(" \t\r\n.,!?;:'\"""''()[]{}…·-–—~")
+_SKIP = set(" \t\r\n.,!?;:'\"“”‘’()[]{}…·-–—~")
 
 
 class TimingError(ValueError):

@@ -41,7 +41,7 @@ class TimingTest(unittest.TestCase):
 
     def test_align_skips_words_not_in_caption_and_punctuation(self):
         words = [tuple(w) for w in WORDS]
-        self.assertEqual(align_words(['"', "작은", "걸음에서"], words), [0.1, 1.2, 1.8])
+        self.assertEqual(align_words(["“", "작은", "걸음에서”"], words), [0.1, 1.2, 1.8])
 
     def test_align_raises_when_text_is_missing(self):
         with self.assertRaisesRegex(TimingError, "'바다' not found"):
