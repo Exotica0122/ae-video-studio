@@ -1,0 +1,35 @@
+{
+  "name": "DEMO",
+  "format": {"width": 3840, "height": 2160, "fps": 23.976, "duration": 40},
+  "grade": {"lumetri": {"23": 10, "17": 104}},
+  "shots": [
+    {"clip": "media/shot_a.mp4", "in": 0, "out": 14},
+    {"clip": "media/shot_b.mp4", "in": 14, "out": 21},
+    {"clip": "media/shot_c.mp4", "in": 21, "out": 28, "exposure": 0.1},
+    {"clip": "media/shot_d.mp4", "in": 28, "out": 40}
+  ],
+  "voices": [
+    {"id": "N1", "file": "media/narration-1.wav", "at": 8.0, "transcript": "transcripts/narration-1.json"},
+    {"id": "I1", "file": "media/interview-1.wav", "at": 15.2, "transcript": "transcripts/interview-1.json"},
+    {"id": "N2", "file": "media/narration-2.wav", "at": 23.5, "transcript": "transcripts/narration-2.json"}
+  ],
+  "music": {"file": "media/music.wav", "gain_db": -6, "duck": {"under_voice": -14, "breath": -10, "swell": -5, "tail": -3}},
+  "sfx": [
+    {"file": "media/whoosh.wav", "at": 6.4, "gain_db": -8},
+    {"file": "media/whoosh.wav", "at": 30.95, "gain_db": -6}
+  ],
+  "graphics": [
+    {"type": "title-page", "in": 0, "out": 6.5, "lines": [["함께 배우고,"], ["함께 ", {"hl": "자라는"}, " 시간"]], "ref": "OPEN STUDIO DAY"},
+    {"type": "caption", "voice": "N1", "lines": [["모든 여정은"], ["작은 ", {"hl": "한 걸음"}, "에서 시작됩니다."]]},
+    {"type": "lower-third", "at": 15.0, "name": "이하늘", "role": "스튜디오 참가자"},
+    {"type": "quote", "voice": "I1", "lines": [["처음에는 ", {"hl": "망설였지만"}], ["함께하니 용기가 생겼어요."]]},
+    {"type": "caption", "voice": "N2", "lines": [["이번 가을,"], ["당신의 ", {"hl": "첫 걸음"}, "을 기다립니다."]]},
+    {"type": "end-card", "in": 31.0, "title": "오픈 스튜디오", "year": 2027, "tagline": "누구나 시작할 수 있는 자리",
+     "rows": [{"label": "신청 기간", "values": ["9월 1일 – 9월 20일"]},
+              {"label": "일정", "values": ["10월 매주 토요일 10시", "커뮤니티 홀"]},
+              {"label": "문의", "values": ["사무실 · 010-0000-0000"]}],
+     "photo": {"clip": "media/shot_c.mp4", "src_in": 2},
+     "logo": {"file": "../sample-logo-white.png", "tint": true}}
+  ],
+  "fade_out": 0.75
+}

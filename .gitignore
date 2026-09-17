@@ -8,3 +8,8 @@ node_modules/
 *.mp4
 *.mov
 *.aep
+
+# generated demo media and builds
+examples/demo/media/
+examples/demo/transcripts/
+examples/demo/build/
