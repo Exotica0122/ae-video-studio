@@ -12,7 +12,7 @@ AUDIO_SUFFIXES = (".wav", ".m4a", ".mp3", ".aif", ".aiff")
 def _candidates(sources) -> list:
     files = []
     for source in sources:
-        source = Path(source).expanduser()
+        source = Path(source).expanduser().resolve()
         if source.is_dir():
             files += sorted(p for p in source.iterdir() if p.is_file())
         else:

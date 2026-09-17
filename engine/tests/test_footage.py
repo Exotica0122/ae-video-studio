@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -47,6 +48,16 @@ class FootageTest(unittest.TestCase):
         log = footage.log_footage([DEMO / "shot_a.mp4"], self.out, every=10.0, max_frames=6)
         ats = [f["at"] for f in log["clips"][0]["frames"]]
         self.assertTrue(all(a < log["clips"][0]["duration"] for a in ats), ats)
+
+    def test_clip_path_is_absolute_even_for_a_relative_source(self):
+        cwd = Path.cwd()
+        try:
+            os.chdir(DEMO)
+            relative = os.path.relpath(DEMO / "shot_a.mp4", DEMO)
+            log = footage.log_footage([relative], self.out, every=10.0, max_frames=1)
+        finally:
+            os.chdir(cwd)
+        self.assertTrue(Path(log["clips"][0]["path"]).is_absolute(), log["clips"][0]["path"])
 
 
 if __name__ == "__main__":
