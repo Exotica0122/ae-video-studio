@@ -1,0 +1,135 @@
+"""ae-video-studio command line: python3 -m aestudio <command> ..."""
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+from .bridge import Bridge, BridgeError
+from .compiler import CompileError, compile_plan
+from .components.layout import LayoutError
+from .design import DesignError, load_design
+from .jsx import emit_script, still_script
+from .ops import OpsError
+from .plan import PlanError, load_plan
+from .render import RenderError, render
+from .timing import TimingError
+
+KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, OSError)
+
+
+def _compile(a) -> Path:
+    plan = load_plan(a.plan)
+    if a.name:
+        plan.name = a.name
+    design = load_design(a.design)
+    ops = compile_plan(plan, design)
+    project = str(Path(a.project).resolve()) if a.project else (str(plan.project) if plan.project else None)
+    out = Path(a.out).resolve() if a.out else plan.root / "build" / f"{plan.name}.jsx"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(emit_script(ops, project=project), encoding="utf-8")
+    print(json.dumps({"jsx": str(out), "ops": len(ops), "fonts": sorted(design.fonts())}, ensure_ascii=False))
+    return out
+
+
+def _report_ok(result) -> bool:
+    return not (isinstance(result, dict) and (result.get("error") or result.get("ok") is False))
+
+
+def cmd_validate(a):
+    plan, design = load_plan(a.plan), load_design(a.design)
+    print(json.dumps({"name": plan.name, "duration": plan.format.duration, "shots": len(plan.shots), "voices": len(plan.voices),
+                      "graphics": len(plan.graphics), "design": design.id, "fonts": sorted(design.fonts())}, ensure_ascii=False))
+    return 0
+
+
+def cmd_compile(a):
+    _compile(a)
+    return 0
+
+
+def cmd_run(a):
+    result = Bridge().run(Path(a.jsx).read_text(encoding="utf-8"), timeout=a.timeout)
+    print(json.dumps(result, ensure_ascii=False, indent=1))
+    return 0 if _report_ok(result) else 1
+
+
+def cmd_build(a):
+    a.jsx = str(_compile(a))
+    return cmd_run(a)
+
+
+def cmd_still(a):
+    out = Path(a.out).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.exists():
+        out.unlink()
+    result = Bridge().run(still_script(a.comp, a.time, str(out)), timeout=a.timeout)
+    if not _report_ok(result):
+        print(json.dumps(result), file=sys.stderr)
+        return 1
+    deadline, last = time.monotonic() + 60, -1
+    while time.monotonic() < deadline:            # saveFrameToPng returns before the file is written
+        size = out.stat().st_size if out.exists() else -1
+        if size > 0 and size == last:
+            print(str(out))
+            return 0
+        last = size
+        time.sleep(1)
+    print(f"error: frame was not written to {out}", file=sys.stderr)
+    return 1
+
+
+def cmd_render(a):
+    print(str(render(a.project, a.comp, a.out, rs=a.rs, om=a.om, allow_running_ae=a.allow_running_ae)))
+    return 0
+
+
+def parser():
+    p = argparse.ArgumentParser(prog="aestudio")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    v = sub.add_parser("validate")
+    v.add_argument("plan")
+    v.add_argument("--design", required=True)
+    v.set_defaults(fn=cmd_validate)
+    for name, fn in (("compile", cmd_compile), ("build", cmd_build)):
+        c = sub.add_parser(name)
+        c.add_argument("plan")
+        c.add_argument("--design", required=True)
+        c.add_argument("--name")
+        c.add_argument("--project")
+        c.add_argument("--out")
+        c.add_argument("--timeout", type=float, default=900)
+        c.set_defaults(fn=fn)
+    r = sub.add_parser("run")
+    r.add_argument("jsx")
+    r.add_argument("--timeout", type=float, default=900)
+    r.set_defaults(fn=cmd_run)
+    s = sub.add_parser("still")
+    s.add_argument("--comp", required=True)
+    s.add_argument("--time", type=float, required=True)
+    s.add_argument("--out", required=True)
+    s.add_argument("--timeout", type=float, default=120)
+    s.set_defaults(fn=cmd_still)
+    e = sub.add_parser("render")
+    e.add_argument("--project", required=True)
+    e.add_argument("--comp", required=True)
+    e.add_argument("--out", required=True)
+    e.add_argument("--rs", default="Best Settings")
+    e.add_argument("--om", default="High Quality")
+    e.add_argument("--allow-running-ae", action="store_true")
+    e.set_defaults(fn=cmd_render)
+    return p
+
+
+def main(argv=None) -> int:
+    args = parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except KNOWN as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
