@@ -31,6 +31,8 @@ def render(project, comp, output, rs="Best Settings", om="High Quality", allow_r
         raise RenderError("After Effects is open. Save the project and quit After Effects first: aerender runs its own copy, "
                           "and a UI render can freeze. Use --allow-running-ae to override.")
     output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        output.unlink()                            # never mistake an older render for this one
     log = output.with_name(output.name + ".log")
     cmd = aerender_cmd(aerender or find_aerender(), project, comp, output, rs, om)
     with open(log, "w", encoding="utf-8") as fh:

@@ -44,6 +44,17 @@ class RenderTest(unittest.TestCase):
                 with self.assertRaisesRegex(r.RenderError, "aerender failed"):
                     r.render(project, "DEMO", Path(d) / "b.mov", aerender="/usr/bin/false")
 
+    def test_stale_output_is_not_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            project, out = Path(d) / "p.aep", Path(d) / "a.mov"
+            project.write_text("x")
+            with mock.patch.object(r, "ae_ui_running", return_value=False):
+                for fake in ("/usr/bin/false", "/usr/bin/true"):   # fails, or exits 0 without writing the output
+                    out.write_text("old render")
+                    with self.assertRaisesRegex(r.RenderError, "aerender failed"):
+                        r.render(project, "DEMO", out, aerender=fake)
+                    self.assertFalse(out.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
