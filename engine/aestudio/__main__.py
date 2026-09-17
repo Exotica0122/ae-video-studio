@@ -9,13 +9,15 @@ from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
 from .components.layout import LayoutError
 from .design import DesignError, load_design
+from .footage import log_footage
 from .jsx import emit_script, still_script
+from .media import MediaError
 from .ops import OpsError
 from .plan import PlanError, load_plan
 from .render import RenderError, render
 from .timing import TimingError
 
-KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, OSError)
+KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, OSError)
 
 
 def _compile(a) -> Path:
@@ -89,6 +91,13 @@ def cmd_render(a):
     return 0
 
 
+def cmd_log_footage(a):
+    log = log_footage(a.sources, a.out, every=a.every, max_frames=a.max_frames)
+    print(json.dumps({"clips": len(log["clips"]), "audio": len(log["audio"]), "errors": len(log["errors"]),
+                      "out": str(Path(a.out).resolve())}, ensure_ascii=False))
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -123,6 +132,12 @@ def parser():
     e.add_argument("--om", default="High Quality")
     e.add_argument("--allow-running-ae", action="store_true")
     e.set_defaults(fn=cmd_render)
+    lf = sub.add_parser("log-footage")
+    lf.add_argument("sources", nargs="+")
+    lf.add_argument("--out", required=True)
+    lf.add_argument("--every", type=float, default=4.0)
+    lf.add_argument("--max-frames", type=int, default=6, dest="max_frames")
+    lf.set_defaults(fn=cmd_log_footage)
     return p
 
 
