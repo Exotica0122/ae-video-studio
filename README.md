@@ -15,7 +15,20 @@ key stills → review render → master).
 - after-effects-mcp with the `runJsx` command (see `bridge/runJsx.patch`)
 - ffmpeg, Python 3.10+ with Pillow, mlx-whisper
 
-## Local development
+## Engine quick start
+
+```bash
+python3 examples/demo/make_media.py                    # fictional demo media (needs ffmpeg)
+cd engine
+python3 -m unittest discover -s tests -t . -v          # unit tests (no After Effects needed)
+python3 -m aestudio validate ../examples/demo/edit.json --design notebook
+# with After Effects + MCP Bridge Auto panel open and a new project:
+python3 -m aestudio build ../examples/demo/edit.json --design cinematic-minimal --project ../examples/demo/build/demo.aep
+```
+
+See `docs/components.md` for the edit-plan graphics and `skills/ae-build-render/SKILL.md` for the full workflow.
+
+## Local plugin install
 
 ```
 /plugin marketplace add ~/github.com/Exotica0122/ae-video-studio
