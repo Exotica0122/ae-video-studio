@@ -16,8 +16,9 @@ from .ops import OpsError
 from .plan import PlanError, load_plan
 from .render import RenderError, render
 from .timing import TimingError
+from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, OSError)
+KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -98,6 +99,20 @@ def cmd_log_footage(a):
     return 0
 
 
+def _print_transcript(out, result):
+    print(json.dumps({"out": str(Path(out).resolve()), "words": len(result["words"]),
+                      "onset": result["onset"], "offset": result["offset"]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_transcribe(a):
+    return _print_transcript(a.out, run_transcribe(a.audio, a.out, template=a.cmd))
+
+
+def cmd_import_transcript(a):
+    return _print_transcript(a.out, import_transcript(a.src, a.out))
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -138,6 +153,15 @@ def parser():
     lf.add_argument("--every", type=float, default=4.0)
     lf.add_argument("--max-frames", type=int, default=6, dest="max_frames")
     lf.set_defaults(fn=cmd_log_footage)
+    tr = sub.add_parser("transcribe")
+    tr.add_argument("audio")
+    tr.add_argument("--out", required=True)
+    tr.add_argument("--cmd")
+    tr.set_defaults(fn=cmd_transcribe)
+    it = sub.add_parser("import-transcript")
+    it.add_argument("src")
+    it.add_argument("--out", required=True)
+    it.set_defaults(fn=cmd_import_transcript)
     return p
 
 
