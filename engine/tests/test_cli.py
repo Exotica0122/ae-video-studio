@@ -33,6 +33,24 @@ class CliTest(unittest.TestCase):
             self.assertIn("Paperlogy-5Medium", info["fonts"])
             self.assertIn("AES.build(", Path(info["jsx"]).read_text(encoding="utf-8"))
 
+    def test_compile_defaults_project_to_build_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            plan = write_min_plan(Path(d))
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(main(["compile", str(plan), "--design", "notebook"]), 0)
+            jsx = Path(json.loads(out.getvalue())["jsx"]).read_text(encoding="utf-8")
+            expected = str(Path(d).resolve() / "build" / "CLI_DEMO.aep")
+            self.assertIn('"project":' + json.dumps(expected), jsx)
+
+    def test_compile_creates_project_parent_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            plan = write_min_plan(Path(d))
+            project = Path(d) / "elsewhere" / "deep" / "p.aep"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["compile", str(plan), "--design", "notebook", "--project", str(project)]), 0)
+            self.assertTrue(project.parent.is_dir())
+            self.assertFalse(project.exists())
+
     def test_known_error_exits_2(self):
         err = io.StringIO()
         with redirect_stderr(err):
@@ -48,6 +66,15 @@ class CliTest(unittest.TestCase):
                 with mock.patch("aestudio.__main__.Bridge") as bridge, redirect_stdout(io.StringIO()):
                     bridge.return_value.run.return_value = report
                     self.assertEqual(main(["run", str(jsx)]), expected)
+
+    def test_run_exits_1_when_result_is_not_a_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            jsx = Path(d) / "x.jsx"
+            jsx.write_text("1")
+            for result in ("not json at all", None, ["ok"], {"ok": "true"}, {"ok": True, "error": "boom"}):
+                with mock.patch("aestudio.__main__.Bridge") as bridge, redirect_stdout(io.StringIO()):
+                    bridge.return_value.run.return_value = result
+                    self.assertEqual(main(["run", str(jsx)]), 1, result)
 
 
 if __name__ == "__main__":

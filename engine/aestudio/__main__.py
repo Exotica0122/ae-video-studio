@@ -24,16 +24,20 @@ def _compile(a) -> Path:
         plan.name = a.name
     design = load_design(a.design)
     ops = compile_plan(plan, design)
-    project = str(Path(a.project).resolve()) if a.project else (str(plan.project) if plan.project else None)
+    if a.project:
+        project = Path(a.project).resolve()
+    else:
+        project = plan.project or (plan.root / "build" / f"{plan.name}.aep").resolve()
+    project.parent.mkdir(parents=True, exist_ok=True)
     out = Path(a.out).resolve() if a.out else plan.root / "build" / f"{plan.name}.jsx"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(emit_script(ops, project=project), encoding="utf-8")
+    out.write_text(emit_script(ops, project=str(project)), encoding="utf-8")
     print(json.dumps({"jsx": str(out), "ops": len(ops), "fonts": sorted(design.fonts())}, ensure_ascii=False))
     return out
 
 
 def _report_ok(result) -> bool:
-    return not (isinstance(result, dict) and (result.get("error") or result.get("ok") is False))
+    return isinstance(result, dict) and result.get("ok") is True and not result.get("error")
 
 
 def cmd_validate(a):
