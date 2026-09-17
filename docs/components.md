@@ -18,9 +18,15 @@ spoken words (punctuation and extra spoken words are ignored).
 ```
 
 - `voice` (required): id from `voices`; words reveal as they are spoken.
-- `place`: `bottom-left | top-left | bottom-right | top-right | lower-center | top-center | center`
-  (caption default `bottom-left`; quote default `top-right`; treatments may override the default).
+- `place`: `bottom-left | top-left | bottom-right | top-right | lower-center | top-center | center`.
 - `in` / `out`: default a little before the voice onset and after its offset.
+
+`place` and the `in`/`out` defaults depend on the design's treatment:
+
+| Design (treatment) | caption `place` | quote `place` | `in` default | `out` default |
+|---|---|---|---|---|
+| notebook (`paper-card`) | `bottom-left` | `top-right` | onset − 0.3 | offset + 0.5 |
+| cinematic-minimal (`line-fade`) | `lower-center` | `lower-center` | onset − 0.4 | offset + 0.6 |
 
 ## lower-third
 
