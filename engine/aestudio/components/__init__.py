@@ -7,3 +7,6 @@ def register(component: str, treatment: str):
         REGISTRY[(component, treatment)] = fn
         return fn
     return wrap
+
+
+from . import notebook  # noqa: E402,F401  (registers treatments)
