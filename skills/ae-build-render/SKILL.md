@@ -11,7 +11,11 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
 ## Before building
 
 1. After Effects is open with the **MCP Bridge Auto** panel, Auto-run on.
-2. The open project is either the video's own project (`--project` path) or a new unsaved one. The build refuses to touch any other project.
+2. The open project is either the video's own project (`--project`, or `plan.project`, or by default `build/<NAME>.aep` next to the plan) or a new, unsaved one. The build checks, before it removes, replaces or saves anything:
+   - a different saved project is open: refused;
+   - no project path in the script and a saved project is open: refused (open a new, unsaved project);
+   - the project file already exists but an unsaved project is open: refused, so a re-run never saves over an existing `.aep`. Open that `.aep` in After Effects first (or delete it), then build again;
+   - a comp with the build's name exists outside the `ae-video-studio` build folder: refused (rename it or the plan). Only the comp, solids and nulls inside the build folder are replaced.
 3. Premiere Pro is closed. Busy Premiere and After Effects can freeze each other.
 4. `python3 -m aestudio validate plan/edit.json --design <design>` passes, and every font it lists is installed.
 
@@ -20,7 +24,7 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
 | Goal | Command |
 |---|---|
 | Build the comp | `build plan/edit.json --design <id or path> --project build/<name>.aep` |
-| Only generate the script | `compile plan/edit.json --design <id>` then `run build/<NAME>.jsx` |
+| Only generate the script | `compile plan/edit.json --design <id> --project build/<name>.aep` then `run build/<NAME>.jsx` |
 | Review stills | `still --comp <NAME> --time <s> --out preview/<file>.png` (one per call) |
 | Review or master render | quit After Effects, then `render --project build/<name>.aep --comp <NAME> --out exports/<file>.mov` |
 

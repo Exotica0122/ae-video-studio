@@ -1,5 +1,8 @@
 """Live test: needs After Effects open with the MCP Bridge Auto panel (Auto-run on) and a NEW, unsaved project.
 
+The first run saves examples/demo/build/demo.aep. Re-runs need that .aep opened in After Effects first (or deleted):
+the build refuses to save an unsaved project over an existing file.
+
 Run from engine/:  AESTUDIO_AE=1 python3 -m unittest tests.ae.test_demo_in_after_effects -v
 """
 import os
