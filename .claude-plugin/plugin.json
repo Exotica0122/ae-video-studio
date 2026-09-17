@@ -1,0 +1,7 @@
+{
+  "name": "ae-video-studio",
+  "version": "0.1.0",
+  "description": "Brief-to-4K motion-designed videos built and rendered in After Effects, with preview-and-approve gates at every creative step.",
+  "author": { "name": "Exotica0122" },
+  "keywords": ["after-effects", "video", "motion-graphics", "audio", "color-grade"]
+}

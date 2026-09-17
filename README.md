@@ -1,0 +1,35 @@
+# ae-video-studio
+
+A Claude Code plugin for making polished, motion-designed videos in **Adobe After Effects**:
+from footage, voice recordings and a short brief to a 4K master, with a preview you approve
+before every creative or expensive step (story → design & fonts → grade → 15 s test →
+key stills → review render → master).
+
+> Status: early. The design is in [`docs/design.md`](docs/design.md). Skills are being
+> generalised from a first real production; no project footage, audio, names or logos are
+> kept in this repo.
+
+## Requirements
+
+- After Effects 2025+ with the MCP Bridge Auto panel (Auto-run on)
+- after-effects-mcp with the `runJsx` command (see `bridge/runJsx.patch`)
+- ffmpeg, Python 3.10+ with Pillow, mlx-whisper
+
+## Local development
+
+```
+/plugin marketplace add ~/github.com/Exotica0122/ae-video-studio
+/plugin install ae-video-studio@ae-video-studio-dev
+```
+
+## Layout
+
+```
+.claude-plugin/   plugin + dev marketplace manifests
+docs/design.md    flow, gates, skills, edit-plan format, lessons learned
+skills/           one folder per skill (in progress)
+lib/              shared After Effects primitives + component contracts (in progress)
+designs/          saved design recipes (notebook, cinematic-minimal, …); new ones are generated per video
+bridge/           runJsx patch for after-effects-mcp
+examples/         fictional sample assets (e.g. sample-logo-white.png)
+```

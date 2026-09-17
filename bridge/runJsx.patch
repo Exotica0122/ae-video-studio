@@ -1,0 +1,151 @@
+diff --git a/src/index.ts b/src/index.ts
+index 10645e9..b58b3ff 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -22,10 +22,11 @@ const SCRIPTS_DIR = path.join(__dirname, "scripts");
+ const TEMP_DIR = path.join(__dirname, "temp");
+ 
+ // Get the correct directory for AE bridge files
+-// Use ~/Documents/ae-mcp-bridge for reliable cross-process access
++// Use ~/.ae-mcp-bridge: shared with the AE panel, and outside ~/Documents,
++// which macOS privacy protection can block for this process
+ function getAETempDir(): string {
+   const homeDir = os.homedir();
+-  const bridgeDir = path.join(homeDir, 'Documents', 'ae-mcp-bridge');
++  const bridgeDir = path.join(homeDir, '.ae-mcp-bridge');
+   // Ensure the directory exists
+   if (!fs.existsSync(bridgeDir)) {
+     fs.mkdirSync(bridgeDir, { recursive: true });
+@@ -946,6 +947,53 @@ server.tool(
+   }
+ );
+ 
++// Run arbitrary ExtendScript through the bridge panel and wait for its result
++server.tool(
++  "run-jsx",
++  "Run ExtendScript code in After Effects via the MCP Bridge Auto panel and wait for the result. " +
++  "The value of the script's last expression is returned (strings that are JSON are parsed). " +
++  "The code runs inside one undo group. Wrap long work in a function and return a small JSON-able summary.",
++  {
++    code: z.string().describe("ExtendScript source to evaluate"),
++    timeoutSeconds: z.number().min(1).max(600).optional().describe("How long to wait for completion (default 60)")
++  },
++  async ({ code, timeoutSeconds = 60 }) => {
++    const jsxDir = path.join(getAETempDir(), 'jsx');
++    fs.mkdirSync(jsxDir, { recursive: true });
++    const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
++    const file = path.join(jsxDir, `${jobId}.jsx`);
++    fs.writeFileSync(file, code, 'utf8');
++
++    clearResultsFile();
++    writeCommandFile("runJsx", { file, jobId });
++
++    const commandFile = path.join(getAETempDir(), 'ae_command.json');
++    const resultFile = path.join(getAETempDir(), 'ae_mcp_result.json');
++    const deadline = Date.now() + timeoutSeconds * 1000;
++    while (Date.now() < deadline) {
++      await new Promise(r => setTimeout(r, 250));
++      try {
++        const cmd = JSON.parse(fs.readFileSync(commandFile, 'utf8'));
++        if (cmd.args?.jobId !== jobId) {
++          return { content: [{ type: "text", text: "Command file was replaced by another command before this job finished." }], isError: true };
++        }
++        if (cmd.status === "completed" || cmd.status === "error") {
++          const text = fs.readFileSync(resultFile, 'utf8');
++          let isError = cmd.status === "error";
++          try { isError = isError || JSON.parse(text).status === "error"; } catch { /* keep raw text */ }
++          return { content: [{ type: "text", text }], isError };
++        }
++      } catch {
++        // file mid-write; keep polling
++      }
++    }
++    return {
++      content: [{ type: "text", text: `Timed out after ${timeoutSeconds}s waiting for job ${jobId}. Is the MCP Bridge Auto panel open with Auto-run enabled? Use get-results to check later.` }],
++      isError: true
++    };
++  }
++);
++
+ // Start the MCP server
+ async function main() {
+   console.error("After Effects MCP Server starting...");
+diff --git a/src/scripts/mcp-bridge-auto.jsx b/src/scripts/mcp-bridge-auto.jsx
+index 09dca98..c5c190a 100644
+--- a/src/scripts/mcp-bridge-auto.jsx
++++ b/src/scripts/mcp-bridge-auto.jsx
+@@ -1317,24 +1317,50 @@ autoRunCheckbox.value = true;
+ var checkInterval = 2000;
+ var isChecking = false;
+ 
+-// Command file path - use Documents folder for reliable access
+-function getCommandFilePath() {
+-    var userFolder = Folder.myDocuments;
+-    var bridgeFolder = new Folder(userFolder.fsName + "/ae-mcp-bridge");
+-    if (!bridgeFolder.exists) {
+-        bridgeFolder.create();
++// --- runJsx: evaluate a script file written by the MCP server ---
++// Only .jsx files directly inside ~/.ae-mcp-bridge/jsx are accepted.
++// The script's last expression value is returned as "result".
++function runJsx(args) {
++    var jsxFolder = new Folder(getBridgeFolder().fsName + "/jsx");
++    var scriptFile = new File(args.file || "");
++    if (!scriptFile.exists || !/\.jsx$/i.test(scriptFile.name) ||
++        scriptFile.parent.fsName !== jsxFolder.fsName) {
++        return JSON.stringify({ status: "error", jobId: args.jobId, message: "runJsx: file must be an existing .jsx inside " + jsxFolder.fsName });
+     }
+-    return bridgeFolder.fsName + "/ae_command.json";
++    var value;
++    app.beginUndoGroup("MCP runJsx");
++    try {
++        value = $.evalFile(scriptFile);
++    } finally {
++        app.endUndoGroup();
++    }
++    var out = null;
++    if (typeof value === "string") {
++        try { out = JSON.parse(value); } catch (e) { out = value; }
++    } else if (value !== undefined) {
++        try { out = JSON.parse(JSON.stringify(value)); } catch (e2) { out = String(value); }
++    }
++    return JSON.stringify({ status: "success", jobId: args.jobId, result: out });
+ }
+ 
+-// Result file path - use Documents folder for reliable access
+-function getResultFilePath() {
+-    var userFolder = Folder.myDocuments;
+-    var bridgeFolder = new Folder(userFolder.fsName + "/ae-mcp-bridge");
++// Bridge folder shared with the MCP server. Lives in ~/.ae-mcp-bridge rather than
++// ~/Documents, which macOS privacy protection can block for the server process.
++function getBridgeFolder() {
++    var bridgeFolder = new Folder("~/.ae-mcp-bridge");
+     if (!bridgeFolder.exists) {
+         bridgeFolder.create();
+     }
+-    return bridgeFolder.fsName + "/ae_mcp_result.json";
++    return bridgeFolder;
++}
++
++// Command file path
++function getCommandFilePath() {
++    return getBridgeFolder().fsName + "/ae_command.json";
++}
++
++// Result file path
++function getResultFilePath() {
++    return getBridgeFolder().fsName + "/ae_mcp_result.json";
+ }
+ 
+ // --- setCompositionProperties: set duration, frameRate, etc. on active or named comp ---
+@@ -1590,6 +1616,11 @@ function executeCommand(command, args) {
+                 result = deleteLayer(args);
+                 logToPanel("Returned from deleteLayer.");
+                 break;
++            case "runJsx":
++                logToPanel("Calling runJsx function...");
++                result = runJsx(args);
++                logToPanel("Returned from runJsx.");
++                break;
+             case "setLayerMask":
+                 logToPanel("Calling setLayerMask function...");
+                 result = setLayerMask(args);

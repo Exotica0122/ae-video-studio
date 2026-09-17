@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
+# per-video working files never belong in the plugin repo
+*.wav
+*.aif
+*.mp4
+*.mov
+*.aep
