@@ -34,25 +34,34 @@ var AES = (function () {
         var root = parent || app.project.rootFolder;
         for (var i = 1; i <= app.project.numItems; i++) {
             var it = app.project.item(i);
-            if (it instanceof FolderItem && it.name === name && it.parentFolder === root) { return it; }
+            if (it instanceof FolderItem && it.name === name && it.parentFolder.id === root.id) { return it; }
         }
         var f = app.project.items.addFolder(name);
         f.parentFolder = root;
         return f;
     }
 
+    // The comp named `name` inside the build folder, or null. Never touches a user's own comp: a same-named comp
+    // anywhere else in the project is an error.
     function findComp(name) {
+        var found = null;
         for (var i = 1; i <= app.project.numItems; i++) {
             var it = app.project.item(i);
-            if (it instanceof CompItem && it.name === name) { return it; }
+            if (it instanceof CompItem && it.name === name) {
+                if (it.parentFolder.id !== ctx.folder.id) {
+                    throw new Error("a comp named " + name + " already exists outside the ae-video-studio build folder; " +
+                        "rename it or the plan");
+                }
+                found = it;
+            }
         }
-        return null;
+        return found;
     }
 
     function removeSolids(folder) {
         for (var i = app.project.numItems; i >= 1; i--) {
             var it = app.project.item(i);
-            if (it instanceof FootageItem && it.parentFolder === folder && it.mainSource instanceof SolidSource) { it.remove(); }
+            if (it instanceof FootageItem && it.parentFolder.id === folder.id && it.mainSource instanceof SolidSource) { it.remove(); }
         }
     }
 
@@ -198,6 +207,7 @@ var AES = (function () {
         audio: function (o) { media(o, true); },
         group: function (o) {
             var n = ctx.comp.layers.addNull(ctx.comp.duration);
+            n.source.parentFolder = ctx.folder;
             tprop(n, "anchor").setValue([0, 0]);
             tprop(n, "position").setValue([0, 0]);
             if (o.fade) {
@@ -264,7 +274,7 @@ var AES = (function () {
                 var sc = 100 * o.width / layer.source.width;
                 tprop(layer, "scale").setValue([sc, sc]);
             }
-            if (o.tint) { layer.property("ADBE Effect Parade").addProperty("ADBE Fill").property("Color").setValue(o.tint); }
+            if (o.tint) { layer.property("ADBE Effect Parade").addProperty("ADBE Fill").property("ADBE Fill-0002").setValue(o.tint); }
         },
         solid: function (o) {
             var layer = ctx.comp.layers.addSolid(o.color, o.id, ctx.comp.width, ctx.comp.height, 1, ctx.comp.duration);
@@ -334,8 +344,16 @@ var AES = (function () {
                 throw new Error("A different project is open (" + app.project.file.fsName + "). Open " +
                     spec.project + " or a new, unsaved project, then build again.");
             }
+            if (!spec.project && app.project.file) {
+                throw new Error("No project path was given and a saved project is open (" + app.project.file.fsName +
+                    "). Open a new, unsaved project or pass a project path, then build again.");
+            }
+            if (spec.project && !app.project.file && new File(spec.project).exists) {
+                throw new Error(spec.project + " already exists; open it in After Effects first, or delete it, then build again.");
+            }
             report.missingFonts = missingFonts(ops);
             ctx.folder = findFolder(ops[0].name, findFolder(spec.folder, null));
+            findComp(ops[0].name);                  // refuse a same-named comp elsewhere before anything is removed
             removeSolids(ctx.folder);
             for (var i = 0; i < ops.length; i++) {
                 var o = ops[i];
