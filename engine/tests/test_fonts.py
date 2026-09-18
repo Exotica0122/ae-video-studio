@@ -58,9 +58,34 @@ class FontsTest(unittest.TestCase):
         self.assertTrue(any(p["headline"].style != p["body"].style for p in pairs))
 
     def test_pairings_can_include_uninstalled_with_a_note(self):
-        pairs = fonts.pairings(["modern", "clean"], scripts=("ko",), installed_only=False)
-        notes = [n for p in pairs for n in p["notes"]]
-        self.assertTrue(any("install" in n.lower() for n in notes), notes)
+        # Fixture catalogue: two families genuinely installed on this machine, plus one whose
+        # PostScript name cannot exist on any machine, so the "uninstalled" case never depends
+        # on which fonts happen to be on disk here.
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "fonts.json"
+            path.write_text(json.dumps([
+                {"id": "paperlogy", "family": "Paperlogy", "postscript": {"regular": "Paperlogy-4Regular"},
+                 "scripts": ["ko", "latin"], "style": "sans", "moods": ["modern", "clean"],
+                 "licence": "OFL-1.1", "url": "https://example.test/paperlogy"},
+                {"id": "maruburi", "family": "MaruBuri", "postscript": {"regular": "MaruBuri-Regular"},
+                 "scripts": ["ko", "latin"], "style": "serif", "moods": ["modern", "clean"],
+                 "licence": "OFL-1.1", "url": "https://example.test/maruburi"},
+                {"id": "fixture-absent", "family": "Fixture Absent",
+                 "postscript": {"regular": "FixtureAbsent-Regular"}, "scripts": ["ko", "latin"],
+                 "style": "display", "moods": ["modern", "clean"],
+                 "licence": "SIL Open Font License 1.1", "url": "https://example.test/fixture-absent"},
+            ], ensure_ascii=False), encoding="utf-8")
+            catalogue = fonts.load_catalogue(path)
+
+            pairs = fonts.pairings(["modern", "clean"], scripts=("ko",), catalogue=catalogue,
+                                   installed_only=False)
+            notes = [n for p in pairs for n in p["notes"]]
+            self.assertTrue(any("Fixture Absent" in n and "SIL Open Font License 1.1" in n
+                                and "https://example.test/fixture-absent" in n for n in notes), notes)
+
+            pairs = fonts.pairings(["modern", "clean"], scripts=("ko",), catalogue=catalogue)
+            notes = [n for p in pairs for n in p["notes"]]
+            self.assertEqual(notes, [])                # installed_only=True (the default): no notes
 
     def test_fonts_for_fills_every_role(self):
         pair = fonts.pairings(["warm"], scripts=("ko",))[0]

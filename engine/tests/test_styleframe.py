@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from aestudio import designgen, styleframe
+from aestudio import fonts as fontlib
 
 LOG = json.loads(json.dumps({
     "clips": [{"name": "a.mp4", "path": "/tmp/a.mp4", "duration": 14.0, "luma": 0.6, "width": 1920, "height": 1080,
@@ -59,10 +60,29 @@ class StyleFrameTest(unittest.TestCase):
         self.assertNotIn("{", html)
 
     def test_install_notes_are_shown(self):
-        drafts = designgen.propose(["modern", "clean"], log=self.log, installed_only=False)
+        # Fixture catalogue: real installed families plus one whose PostScript name cannot exist on
+        # any machine, so this does not depend on a font happening to be missing here.
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "fonts.json"
+            path.write_text(json.dumps([
+                {"id": "paperlogy", "family": "Paperlogy", "postscript": {"regular": "Paperlogy-4Regular"},
+                 "scripts": ["ko", "latin"], "style": "sans", "moods": ["modern", "clean"],
+                 "licence": "OFL-1.1", "url": "https://example.test/paperlogy"},
+                {"id": "maruburi", "family": "MaruBuri", "postscript": {"regular": "MaruBuri-Regular"},
+                 "scripts": ["ko", "latin"], "style": "serif", "moods": ["modern", "clean"],
+                 "licence": "OFL-1.1", "url": "https://example.test/maruburi"},
+                {"id": "fixture-absent", "family": "Fixture Absent",
+                 "postscript": {"regular": "FixtureAbsent-Regular"}, "scripts": ["ko", "latin"],
+                 "style": "display", "moods": ["modern", "clean"],
+                 "licence": "SIL Open Font License 1.1", "url": "https://example.test/fixture-absent"},
+            ], ensure_ascii=False), encoding="utf-8")
+            catalogue = fontlib.load_catalogue(path)
+            drafts = designgen.propose(["modern", "clean"], log=self.log, installed_only=False,
+                                       catalogue=catalogue)
         index = styleframe.render_mockups(drafts, self.log, self.root / "preview2")
         html = index.read_text(encoding="utf-8")
         notes = [n for d in drafts for n in d.notes]
+        self.assertTrue(notes)                          # otherwise the loop below asserts nothing
         for note in notes:
             self.assertIn(note.split(":")[0], html)
 

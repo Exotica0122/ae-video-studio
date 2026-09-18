@@ -66,6 +66,16 @@ class CliDesignTest(unittest.TestCase):
         (self.preview / "drafts.json").write_text(json.dumps(drafts, ensure_ascii=False), encoding="utf-8")
         return drafts[0]["id"]
 
+    def _drafts_json_with_an_unregistered_font(self):
+        """FixtureAbsent-Regular is in no catalogue and can be installed on no machine, so it stands in
+        for a font design-choose must catch by rechecking rather than by trusting a persisted note."""
+        drafts = json.loads((self.preview / "drafts.json").read_text(encoding="utf-8"))[:1]
+        drafts[0]["tokens"]["type"]["headline"] = {"font": "FixtureAbsent-Regular", "family": "Fixture Absent",
+                                                    "size": 150}
+        drafts[0]["_notes"] = []
+        (self.preview / "drafts.json").write_text(json.dumps(drafts, ensure_ascii=False), encoding="utf-8")
+        return drafts[0]["id"]
+
     def _choose(self, draft_id):
         err, out = io.StringIO(), io.StringIO()
         with redirect_stderr(err), redirect_stdout(out):
@@ -84,9 +94,9 @@ class CliDesignTest(unittest.TestCase):
 
     def test_choose_rechecks_the_fonts_when_the_note_is_missing(self):
         self._propose()
-        warnings = self._choose(self._drafts_json_with_an_uninstalled_font([]))
-        self.assertIn("install Gowun Batang first", warnings)
-        self.assertIn("GowunBatang-Bold", warnings)
+        warnings = self._choose(self._drafts_json_with_an_unregistered_font())
+        self.assertIn("warning:", warnings)
+        self.assertIn("FixtureAbsent-Regular", warnings)
 
     def test_choose_without_a_choice_fails(self):
         self._propose()
