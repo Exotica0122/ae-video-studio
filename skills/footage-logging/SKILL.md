@@ -17,6 +17,13 @@ Writes `analysis/footage.json` (one entry per clip: size, fps, duration, audio, 
 their own brightness and 2×2 colours), `analysis/frames/*.jpg` and one contact sheet per clip in `analysis/sheets/`.
 Audio files are listed under `audio` with their duration. Unreadable files land in `errors` and never stop the run.
 
+Photos sitting beside the clips (JPEG, PNG, TIFF, WebP) are logged too, under `images`: size, mean brightness,
+2×2 colours and a downscaled preview in `analysis/frames/`. They never appear in `clips` — a still has no duration,
+so `style_frame_plan` can't build a timed shot from one — but design mockups fall back to image previews when a
+shoot has fewer clip frames than design drafts, so a photo-only or photo-heavy shoot still gets real backgrounds.
+RAW and HEIC files are not read (ffmpeg cannot reliably decode them on this machine). Camera sidecars — `.xml`,
+`.thm`, `.lrv` — are ignored by design, not logged and not reported as errors.
+
 Look at the contact sheets before proposing a story or a design: they are the fastest way to see what the footage
 actually contains.
 

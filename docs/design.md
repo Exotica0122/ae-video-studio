@@ -73,7 +73,7 @@ be re-run ("re-grade", "move the logo") without touching the others.
 |---|---|---|---|
 | `video-director` | Entry point. Runs the brief, owns the gate sequence, routes to the other skills, keeps `plan/decisions.md` | everything in `plan/` | `plan/brief.md`, `plan/story.md` |
 | `studio-doctor` | Environment + bridge + font checks with fix instructions | — | console report |
-| `footage-logging` | Probe clips, contact sheets, per-shot luma, transcripts with word timings | source folders | `analysis/footage.json` (per-clip and per-frame brightness live in it), `analysis/transcripts/*.json`, `analysis/frames/*.jpg`, `analysis/sheets/*.jpg` |
+| `footage-logging` | Probe clips, contact sheets, per-shot luma, photo previews, transcripts with word timings | source folders | `analysis/footage.json` (per-clip and per-frame brightness, plus a per-photo `images` list, live in it), `analysis/transcripts/*.json`, `analysis/frames/*.jpg`, `analysis/sheets/*.jpg` |
 | `audio-post` | Trim/normalise voices, place voices with natural breaths, cut music to length, voice-aware ducking, SFX placement, loudness targets | `plan/story.md`, transcripts | `plan/edit.json` (voices, music, sfx sections) |
 | `color-grade` | Build look previews (gate 3), per-shot exposure matching, selective wall/colour calming | `analysis/footage.json` | `plan/grade.json` |
 | `design-system` | Creates 2–3 distinct design directions per video from primitives (gate 2), style frames, font pairings; saves reusable designs | brief, `plan/story.md`, footage | `plan/design.json`, `preview/` |
