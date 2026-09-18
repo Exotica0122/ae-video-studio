@@ -115,6 +115,29 @@ class CliDesignTest(unittest.TestCase):
         lines = [json.loads(line) for line in out.getvalue().strip().splitlines()]
         self.assertEqual(lines[-1]["chosen"], info["drafts"][0])
 
+    def test_real_script_lines_reach_the_mockups_and_the_style_frame(self):
+        lines = [["작은 "], [{"hl": "한 걸음"}, "에서 시작합니다"]]
+        lines_path = self.root / "lines.json"
+        lines_path.write_text(json.dumps(lines, ensure_ascii=False), encoding="utf-8")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["design-propose", "--analysis", str(self.analysis), "--out", str(self.preview),
+                         "--mood", "warm", "--lines", str(lines_path)])
+        self.assertEqual(code, 0)
+        info = json.loads(out.getvalue())
+        page = Path(info["index"]).read_text(encoding="utf-8")
+        self.assertIn("에서 시작합니다", page)
+        self.assertNotIn("이 화면의 글자 크기와", page)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["design-styleplan", "--dir", str(self.preview), "--analysis", str(self.analysis),
+                         "--out", str(self.root / "style"), "--id", info["drafts"][0],
+                         "--lines", str(lines_path)])
+        self.assertEqual(code, 0)
+        plan = json.loads(Path(json.loads(out.getvalue())["plan"]).read_text(encoding="utf-8"))
+        caption = next(g for g in plan["graphics"] if g["type"] == "caption")
+        self.assertEqual(caption["lines"], lines)
+
     def test_styleplan_writes_an_edit_plan(self):
         from aestudio.plan import load_plan
         info = self._propose()

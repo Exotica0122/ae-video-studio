@@ -13,10 +13,16 @@ Needs `analysis/footage.json` from the `footage-logging` skill.
 1. **Propose** — mood words come from the brief (e.g. warm, hopeful, modern, restrained):
 
    ```
-   design-propose --analysis <project>/analysis --out <project>/preview --mood warm --mood hopeful
+   design-propose --analysis <project>/analysis --out <project>/preview --mood warm --mood hopeful \
+     --lines <project>/plan/lines.json
    ```
 
    Writes `<project>/preview/index.html` (mockups built from the video's own frames) and `drafts.json`.
+
+   `--lines` is a JSON array of caption lines in the `lines` format from `docs/components.md`, e.g.
+   `[["작은 "], [{"hl": "한 걸음"}, "에서 시작합니다"]]`. Use a real line from the script: placeholder text
+   is the wrong length and the wrong words, so the readability check only means something with the
+   user's own sentence.
 
 2. **Preview and let the user click**:
 
@@ -36,11 +42,14 @@ Needs `analysis/footage.json` from the `footage-logging` skill.
 4. **Confirm in After Effects** — the mockups are approximations, so always confirm the winner:
 
    ```
-   design-styleplan --dir <project>/preview --analysis <project>/analysis --out <project>/style
+   design-styleplan --dir <project>/preview --analysis <project>/analysis --out <project>/style \
+     --lines <project>/plan/lines.json
    build <project>/style/edit.json --design <project>/plan/design.json --project <project>/build/style.aep
-   still --comp STYLE_<ID> --time 1.2 --out <project>/preview/style-caption.png
-   still --comp STYLE_<ID> --time 4.5 --out <project>/preview/style-endcard.png
+   still --comp <name> --time 1.2 --out <project>/preview/style-caption.png
+   still --comp <name> --time 4.5 --out <project>/preview/style-endcard.png
    ```
+
+   `<name>` is the `name` printed by `design-styleplan`.
 
    Show both stills. Check the text is readable over the real footage, nothing is clipped, and the Korean line breaks
    fall between words. Only then move on to the story and the full edit plan.
@@ -48,7 +57,9 @@ Needs `analysis/footage.json` from the `footage-logging` skill.
 ## Rules
 
 - Only fonts the catalogue reports as installed are offered. With `--allow-uninstalled-fonts`, each draft carries an
-  install note with its licence and link — pass that note to the user and let them decide.
+  install note with its licence and link — pass that note to the user and let them decide. `design-choose` repeats
+  those notes and re-checks the chosen design's fonts, printing a `warning:` line for anything not installed;
+  After Effects would otherwise substitute the font silently.
 - Milestone 2a varies palette, fonts and which treatment set is used (paper-card family or line-fade family).
   A genuinely new caption or end-card treatment is a code change, not a draft — say so rather than promising it.
 - "Mix A's type with B's colours" is a normal request: run `design-choose` for the base, then edit

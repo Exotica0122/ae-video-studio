@@ -124,6 +124,22 @@ def _load_log(analysis):
     return log
 
 
+def _script_lines(path):
+    """--lines: a JSON array of caption lines (docs/components.md), e.g. [["작은 "], [{"hl": "한 걸음"}]]."""
+    if not path:
+        return None
+    lines = json.loads(Path(path).read_text(encoding="utf-8"))
+    ok = isinstance(lines, list) and lines and all(
+        isinstance(line, list) and line and all(isinstance(seg, str) or
+                                                (isinstance(seg, dict) and isinstance(seg.get("hl"), str))
+                                                for seg in line)
+        for line in lines)
+    if not ok:
+        raise DesignGenError(f'{path}: expected a JSON array of caption lines, '
+                             'e.g. [["작은 "], [{"hl": "한 걸음"}, "에서"]]')
+    return lines
+
+
 def _drafts_from_dir(directory):
     recipes = json.loads((Path(directory) / "drafts.json").read_text(encoding="utf-8"))
     drafts = []
@@ -165,7 +181,7 @@ def cmd_design_propose(a):
     log = _load_log(a.analysis)
     drafts = propose(a.mood, log=log, scripts=tuple(a.scripts), installed_only=not a.allow_uninstalled_fonts,
                      limit=a.limit)
-    index = render_mockups(drafts, log, a.out)
+    index = render_mockups(drafts, log, a.out, script_lines=_script_lines(a.lines))
     print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index),
                       "notes": [n for d in drafts for n in d.notes]}, ensure_ascii=False))
     return 0
@@ -196,7 +212,7 @@ def cmd_design_choose(a):
 
 def cmd_design_styleplan(a):
     draft, _ = _pick(a.dir, a.id)
-    plan_path = style_frame_plan(draft, _load_log(a.analysis), a.out)
+    plan_path = style_frame_plan(draft, _load_log(a.analysis), a.out, script_lines=_script_lines(a.lines))
     print(json.dumps({"plan": str(plan_path),
                       "name": json.loads(Path(plan_path).read_text(encoding="utf-8"))["name"]}, ensure_ascii=False))
     return 0
@@ -258,6 +274,7 @@ def parser():
     dp.add_argument("--scripts", nargs="+", default=["ko"])
     dp.add_argument("--allow-uninstalled-fonts", action="store_true", dest="allow_uninstalled_fonts")
     dp.add_argument("--limit", type=int, default=3)
+    dp.add_argument("--lines", help="JSON array of real caption lines to typeset in the mockups")
     dp.set_defaults(fn=cmd_design_propose)
     dv = sub.add_parser("design-preview")
     dv.add_argument("--dir", required=True)
@@ -276,6 +293,7 @@ def parser():
     ds.add_argument("--analysis", required=True)
     ds.add_argument("--out", required=True)
     ds.add_argument("--id")
+    ds.add_argument("--lines", help="JSON array of real caption lines to typeset in the style frame")
     ds.set_defaults(fn=cmd_design_styleplan)
     return p
 
