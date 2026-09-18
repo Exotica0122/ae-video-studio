@@ -73,9 +73,9 @@ be re-run ("re-grade", "move the logo") without touching the others.
 |---|---|---|---|
 | `video-director` | Entry point. Runs the brief, owns the gate sequence, routes to the other skills, keeps `plan/decisions.md` | everything in `plan/` | `plan/brief.md`, `plan/story.md` |
 | `studio-doctor` | Environment + bridge + font checks with fix instructions | — | console report |
-| `footage-logging` | Probe clips, contact sheets, per-shot luma, transcripts with word timings | source folders | `analysis/footage.json`, `analysis/luma.json`, `analysis/transcripts/*.json`, `analysis/sheets/*.png` |
+| `footage-logging` | Probe clips, contact sheets, per-shot luma, transcripts with word timings | source folders | `analysis/footage.json` (per-clip and per-frame brightness live in it), `analysis/transcripts/*.json`, `analysis/frames/*.jpg`, `analysis/sheets/*.jpg` |
 | `audio-post` | Trim/normalise voices, place voices with natural breaths, cut music to length, voice-aware ducking, SFX placement, loudness targets | `plan/story.md`, transcripts | `plan/edit.json` (voices, music, sfx sections) |
-| `color-grade` | Build look previews (gate 3), per-shot exposure matching, selective wall/colour calming | `analysis/luma.json` | `plan/grade.json` |
+| `color-grade` | Build look previews (gate 3), per-shot exposure matching, selective wall/colour calming | `analysis/footage.json` | `plan/grade.json` |
 | `design-system` | Creates 2–3 distinct design directions per video from primitives (gate 2), style frames, font pairings; saves reusable designs | brief, `plan/story.md`, footage | `plan/design.json`, `preview/` |
 | `ae-build-render` | Compile `plan/edit.json` + design package into ExtendScript; build comp; test clip, stills, review render, 4K master; render polling | all of `plan/` | AE project, `exports/*` |
 | `video-qa` | Decode check, per-section loudness, music-before-voice check, SFX audibility, stills, share copy | exports, `plan/edit.json` | `qa/report-vNN.md`, share copy |
@@ -91,7 +91,7 @@ Created by `video-director` inside a folder the user picks (usually next to the 
 ```
 <project>/
   plan/        brief.md  story.md  design.json  grade.json  edit.json  decisions.md
-  analysis/    footage.json  luma.json  transcripts/  sheets/
+  analysis/    footage.json  transcripts/  frames/  sheets/
   preview/     index.html + style frames, grade looks, stills
   build/       generated .jsx, AE project (.aep)
   exports/     test clip, review renders, share copies, 4K master
@@ -252,12 +252,13 @@ Grade
 7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) is not
    part of this milestone.
 8. **`design-system`** gate 2: generating new directions, style frames, font pairings,
-   `preview/index.html`, "save this design". *(done, Milestone 2a)*
+   `preview/index.html`, "save this design". *(done, Milestone 2a — one font pairing per direction;
+   offering 2–3 pairings per direction is deferred to a later milestone)*
 9. **`video-director`** orchestration + `studio-doctor`.
+10. Try on a second, different kind of video; fix what doesn't generalise.
 
 Milestone 2a shipped `footage-logging` and `design-system` (steps 7–8, minus `color-grade`). What
 remains: grade previews, `audio-post`, `video-qa`, `video-director`, `studio-doctor`.
-10. Try on a second, different kind of video; fix what doesn't generalise.
 
 ## 10. Open questions
 

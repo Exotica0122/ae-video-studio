@@ -101,20 +101,16 @@ def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archety
     moods = [m.lower() for m in brief_moods or []]
     ranked = sorted(archetypes, key=lambda a: (-len(set(moods) & {m.lower() for m in a.get("moods", [])}), a["id"]))
     accent = accent_from_footage(log)
-    drafts, used = [], set()
+    drafts = []
     for arch in ranked:
         pairs = fontlib.pairings(arch.get("font_moods") or arch.get("moods", []), scripts=scripts,
                                  catalogue=catalogue, installed_only=installed_only, dirs=dirs)
-        for pairing in pairs:
-            key = (arch["id"], pairing["headline"].id)
-            if key in used:
-                continue
-            used.add(key)
-            recipe = _recipe(arch, pairing, accent)
+        if pairs:
+            # One font pairing per direction; offering 2–3 pairings per direction is a later milestone.
+            recipe = _recipe(arch, pairs[0], accent)
             drafts.append(Draft(id=recipe["id"], name=recipe["name"], mood=recipe["mood"], recipe=recipe,
                                 fonts={r: s["font"] for r, s in recipe["tokens"]["type"].items()},
-                                notes=list(pairing["notes"])))
-            break
+                                notes=list(pairs[0]["notes"])))
         if len(drafts) >= limit:
             break
     if not drafts:
