@@ -9,16 +9,20 @@ from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
 from .components.layout import LayoutError
 from .design import DesignError, load_design
+from .designgen import DesignGenError, Draft, propose, save_design, style_frame_plan
 from .footage import log_footage
+from .fonts import FontError
 from .jsx import emit_script, still_script
 from .media import MediaError
 from .ops import OpsError
 from .plan import PlanError, load_plan
+from .preview import PreviewError, read_choice, serve, wait_for_choice
 from .render import RenderError, render
+from .styleframe import render_mockups
 from .timing import TimingError
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, OSError)
+KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, OSError)
 
 
 def _compile(a) -> Path:
@@ -113,6 +117,68 @@ def cmd_import_transcript(a):
     return _print_transcript(a.out, import_transcript(a.src, a.out))
 
 
+def _load_log(analysis):
+    analysis = Path(analysis).resolve()
+    log = json.loads((analysis / "footage.json").read_text(encoding="utf-8"))
+    log["root"] = str(analysis)
+    return log
+
+
+def _drafts_from_dir(directory):
+    recipes = json.loads((Path(directory) / "drafts.json").read_text(encoding="utf-8"))
+    return [Draft(id=r["id"], name=r.get("name", r["id"]), mood=r.get("mood", []), recipe=r) for r in recipes]
+
+
+def _pick(directory, draft_id):
+    drafts = _drafts_from_dir(directory)
+    choice = read_choice(directory) or {}
+    wanted = draft_id or choice.get("id")
+    if not wanted:
+        raise DesignGenError(f"no design chosen yet — run `design-preview --dir {directory}` and click one, "
+                             "or pass --id")
+    for draft in drafts:
+        if draft.id == wanted:
+            return draft, choice.get("note")
+    raise DesignGenError(f"draft '{wanted}' is not in {Path(directory) / 'drafts.json'}")
+
+
+def cmd_design_propose(a):
+    log = _load_log(a.analysis)
+    drafts = propose(a.mood, log=log, scripts=tuple(a.scripts), installed_only=not a.allow_uninstalled_fonts,
+                     limit=a.limit)
+    index = render_mockups(drafts, log, a.out)
+    print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index),
+                      "notes": [n for d in drafts for n in d.notes]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_design_preview(a):
+    server, url = serve(a.dir, port=a.port)
+    (Path(a.dir) / "url.json").write_text(json.dumps({"url": url}), encoding="utf-8")
+    print(json.dumps({"url": url, "waiting": not a.no_wait}, ensure_ascii=False), flush=True)
+    if a.no_wait:
+        return 0
+    choice = wait_for_choice(server, a.dir, timeout=a.timeout, poll=a.poll)
+    print(json.dumps({"chosen": (choice or {}).get("id"), "note": (choice or {}).get("note"), "url": url},
+                     ensure_ascii=False))
+    return 0 if choice else 1
+
+
+def cmd_design_choose(a):
+    draft, note = _pick(a.dir, a.id)
+    path = save_design(draft, a.out)
+    print(json.dumps({"design": str(path), "id": draft.id, "note": note}, ensure_ascii=False))
+    return 0
+
+
+def cmd_design_styleplan(a):
+    draft, _ = _pick(a.dir, a.id)
+    plan_path = style_frame_plan(draft, _load_log(a.analysis), a.out)
+    print(json.dumps({"plan": str(plan_path),
+                      "name": json.loads(Path(plan_path).read_text(encoding="utf-8"))["name"]}, ensure_ascii=False))
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -162,6 +228,32 @@ def parser():
     it.add_argument("src")
     it.add_argument("--out", required=True)
     it.set_defaults(fn=cmd_import_transcript)
+    dp = sub.add_parser("design-propose")
+    dp.add_argument("--analysis", required=True)
+    dp.add_argument("--out", required=True)
+    dp.add_argument("--mood", action="append", default=[])
+    dp.add_argument("--scripts", nargs="+", default=["ko"])
+    dp.add_argument("--allow-uninstalled-fonts", action="store_true", dest="allow_uninstalled_fonts")
+    dp.add_argument("--limit", type=int, default=3)
+    dp.set_defaults(fn=cmd_design_propose)
+    dv = sub.add_parser("design-preview")
+    dv.add_argument("--dir", required=True)
+    dv.add_argument("--timeout", type=float, default=1800)
+    dv.add_argument("--poll", type=float, default=0.5)
+    dv.add_argument("--port", type=int, default=0)
+    dv.add_argument("--no-wait", action="store_true", dest="no_wait")
+    dv.set_defaults(fn=cmd_design_preview)
+    dc = sub.add_parser("design-choose")
+    dc.add_argument("--dir", required=True)
+    dc.add_argument("--out", required=True)
+    dc.add_argument("--id")
+    dc.set_defaults(fn=cmd_design_choose)
+    ds = sub.add_parser("design-styleplan")
+    ds.add_argument("--dir", required=True)
+    ds.add_argument("--analysis", required=True)
+    ds.add_argument("--out", required=True)
+    ds.add_argument("--id")
+    ds.set_defaults(fn=cmd_design_styleplan)
     return p
 
 
