@@ -58,24 +58,33 @@ class CliDesignTest(unittest.TestCase):
         recipe = json.loads(design_path.read_text(encoding="utf-8"))
         self.assertEqual(recipe["id"], info["drafts"][0])
 
-    def _drafts_json_with_an_uninstalled_font(self):
-        drafts = json.loads((self.preview / "drafts.json").read_text(encoding="utf-8"))
-        drafts = drafts[:1]
+    def _drafts_json_with_an_uninstalled_font(self, notes):
+        """Gowun Batang is in the catalogue and not installed here, so it stands in for any missing font."""
+        drafts = json.loads((self.preview / "drafts.json").read_text(encoding="utf-8"))[:1]
         drafts[0]["tokens"]["type"]["headline"] = {"font": "GowunBatang-Bold", "family": "Gowun Batang", "size": 150}
-        drafts[0]["_notes"] = ["install Gowun Batang first: SIL Open Font License 1.1 — https://example.test"]
+        drafts[0]["_notes"] = notes
         (self.preview / "drafts.json").write_text(json.dumps(drafts, ensure_ascii=False), encoding="utf-8")
         return drafts[0]["id"]
 
-    def test_choose_warns_about_an_uninstalled_font(self):
-        self._propose()
-        draft_id = self._drafts_json_with_an_uninstalled_font()
+    def _choose(self, draft_id):
         err, out = io.StringIO(), io.StringIO()
         with redirect_stderr(err), redirect_stdout(out):
             code = main(["design-choose", "--dir", str(self.preview), "--out", str(self.root / "design.json"),
                          "--id", draft_id])
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out.getvalue())["id"], draft_id)
-        warnings = err.getvalue()
+        return err.getvalue()
+
+    def test_choose_repeats_the_install_note_of_an_uninstalled_font(self):
+        self._propose()
+        note = "install Gowun Batang first: SIL Open Font License 1.1 — https://example.test"
+        warnings = self._choose(self._drafts_json_with_an_uninstalled_font([note]))
+        self.assertIn(note, warnings)
+        self.assertEqual(warnings.count("Gowun Batang"), 1)            # said once, not once per source
+
+    def test_choose_rechecks_the_fonts_when_the_note_is_missing(self):
+        self._propose()
+        warnings = self._choose(self._drafts_json_with_an_uninstalled_font([]))
         self.assertIn("install Gowun Batang first", warnings)
         self.assertIn("GowunBatang-Bold", warnings)
 

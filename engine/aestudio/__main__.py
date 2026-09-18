@@ -147,20 +147,22 @@ def _drafts_from_dir(directory):
         recipe = dict(raw)
         notes = recipe.pop("_notes", [])
         drafts.append(Draft(id=recipe["id"], name=recipe.get("name", recipe["id"]), mood=recipe.get("mood", []),
-                            recipe=recipe, fonts={r: s["font"] for r, s in recipe["tokens"]["type"].items()},
+                            recipe=recipe,
+                            fonts={r: s["font"] for r, s in recipe.get("tokens", {}).get("type", {}).items()},
                             notes=list(notes)))
     return drafts
 
 
-def _font_warnings(design) -> list:
-    """After Effects substitutes a missing font silently, so say so before anything is built."""
-    catalogue, files, out = load_catalogue(), installed_files(), []
+def _font_warnings(design) -> dict:
+    """{family: warning} for every font the design needs and this machine does not have.
+    After Effects substitutes a missing font silently, so say so before anything is built."""
+    catalogue, files, out = load_catalogue(), installed_files(), {}
     for name in sorted(design.fonts()):
         font = next((f for f in catalogue if name in f.postscript.values()), None)
         if font is None:
-            out.append(f"{name} is not in the font catalogue — check it is installed before building")
+            out[name] = f"{name} is not in the font catalogue — check it is installed before building"
         elif not is_installed(font, files):
-            out.append(f"install {font.family} first ({name}): {font.licence} — {font.url}")
+            out[font.family] = f"install {font.family} first ({name}): {font.licence} — {font.url}"
     return out
 
 
@@ -202,7 +204,10 @@ def cmd_design_preview(a):
 def cmd_design_choose(a):
     draft, note = _pick(a.dir, a.id)
     path = save_design(draft, a.out)
-    warnings = list(dict.fromkeys(list(draft.notes) + _font_warnings(load_design(path))))
+    warnings = list(dict.fromkeys(draft.notes))
+    for family, warning in _font_warnings(load_design(path)).items():
+        if not any(f"install {family} first" in note for note in warnings):
+            warnings.append(warning)                # the draft's own note already covers this font
     for line in warnings:
         print(f"warning: {line}", file=sys.stderr)
     print(json.dumps({"design": str(path), "id": draft.id, "note": note, "warnings": warnings},
