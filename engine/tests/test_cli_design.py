@@ -87,6 +87,15 @@ class CliDesignTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("error:", err.getvalue())
 
+    def test_corrupt_footage_json_reports_an_error_instead_of_a_traceback(self):
+        (self.analysis / "footage.json").write_text("{ not json", encoding="utf-8")
+        err = io.StringIO()
+        with redirect_stderr(err), redirect_stdout(io.StringIO()):
+            code = main(["design-propose", "--analysis", str(self.analysis), "--out", str(self.preview),
+                         "--mood", "warm"])
+        self.assertEqual(code, 2)
+        self.assertIn("error:", err.getvalue())
+
     def test_preview_no_wait_prints_a_url(self):
         self._propose()
         out = io.StringIO()

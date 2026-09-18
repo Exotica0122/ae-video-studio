@@ -22,7 +22,7 @@ from .styleframe import render_mockups
 from .timing import TimingError
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, OSError)
+KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
