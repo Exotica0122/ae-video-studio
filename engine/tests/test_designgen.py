@@ -76,6 +76,22 @@ class DesignGenTest(unittest.TestCase):
         self.assertEqual({g["type"] for g in plan.graphics}, {"caption", "lower-third", "end-card"})
         self.assertTrue(plan.shots)
 
+    def test_style_frame_shots_fit_inside_short_clips(self):
+        from aestudio.plan import load_plan
+        draft = designgen.propose(["warm"], log=LOG)[0]
+        sources = {"short.mp4": 2.0, "long.mp4": 14.0}
+        with tempfile.TemporaryDirectory() as d:
+            for name in sources:
+                (Path(d) / name).write_text("x")
+            log = {"clips": [{"name": name, "path": str(Path(d) / name), "duration": length,
+                              "luma": 0.9 if name == "short.mp4" else 0.3, "frames": []}
+                             for name, length in sources.items()], "audio": [], "errors": []}
+            plan = load_plan(designgen.style_frame_plan(draft, log, Path(d) / "style", duration=6.0))
+        self.assertEqual(plan.shots[0].clip.name, "long.mp4")    # brighter, but 2s cannot hold 1s + 3s
+        for shot in plan.shots:
+            self.assertGreater(shot.end, shot.start, shot.clip.name)
+            self.assertLessEqual(shot.src_in + (shot.end - shot.start), sources[shot.clip.name], shot.clip.name)
+
     def test_propose_looks_for_fonts_where_it_is_told_to(self):
         from aestudio.fonts import FontError
         with tempfile.TemporaryDirectory() as d:

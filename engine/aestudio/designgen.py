@@ -15,6 +15,7 @@ from .design import COMPONENTS, PALETTE_KEYS, ROLES, load_design
 ARCHETYPES = Path(__file__).resolve().parents[2] / "designs" / "archetypes"
 BASE_SIZES = {"headline": 150, "body": 100, "emphasis": 118, "quote": 92, "label": 64, "scripture": 128}
 FALLBACK_ACCENT = "#C9A46A"
+STYLE_SRC_IN = 1.0             # skip the first second of a clip; style frames want settled footage
 
 
 class DesignGenError(ValueError):
@@ -136,20 +137,28 @@ def save_design(draft: Draft, out_path) -> Path:
     return out_path
 
 
+def _style_shot(clip, start: float, segment: float) -> dict:
+    """Keep the shot inside its clip: a 2s clip cannot give 1s of handle plus 3s of frames."""
+    available = float(clip.get("duration") or 0) or STYLE_SRC_IN + segment      # unknown length: trust it
+    src_in = STYLE_SRC_IN if available >= STYLE_SRC_IN + segment else 0.0
+    segment = round(min(segment, max(available - src_in, 0.2)), 3)
+    return {"clip": clip["path"], "in": round(start, 3), "out": round(start + segment, 3), "src_in": src_in}
+
+
 def style_frame_plan(draft: Draft, log, out_dir, script_lines=None, duration=6.0) -> Path:
-    clips = sorted((c for c in (log or {}).get("clips", []) if c.get("path")),
-                   key=lambda c: -(c.get("luma") or 0))[:2]
+    brightest = sorted((c for c in (log or {}).get("clips", []) if c.get("path")),
+                       key=lambda c: -(c.get("luma") or 0))
+    half = round(duration / 2, 3)
+    # Prefer clips long enough to hold the whole segment; fall back to the brightest ones.
+    clips = sorted(brightest, key=lambda c: float(c.get("duration") or 0) < STYLE_SRC_IN + half)[:2]
     if not clips:
         raise DesignGenError("style frames need at least one logged clip with a path")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     lines = script_lines or [["이 화면의 글자 크기와"], ["색이 ", {"hl": "잘 보이는지"}, " 확인해 주세요."]]
-    half = round(duration / 2, 3)
-    shots = [{"clip": clips[0]["path"], "in": 0, "out": half, "src_in": 1.0}]
+    shots = [_style_shot(clips[0], 0.0, half if len(clips) > 1 else duration)]
     if len(clips) > 1:
-        shots.append({"clip": clips[1]["path"], "in": half, "out": duration, "src_in": 1.0})
-    else:
-        shots[0]["out"] = duration
+        shots.append(_style_shot(clips[1], shots[0]["out"], duration - shots[0]["out"]))
     plan = {"name": "STYLE_" + draft.id.upper().replace("-", "_"),
             "format": {"width": 3840, "height": 2160, "fps": 23.976, "duration": duration},
             "shots": shots, "voices": [], "graphics": [
