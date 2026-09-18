@@ -193,6 +193,7 @@ The chosen direction is confirmed with a real After Effects still before anythin
 """
     index = out_dir / "index.html"
     index.write_text(page, encoding="utf-8")
-    (out_dir / "drafts.json").write_text(json.dumps([d.recipe for d in drafts], ensure_ascii=False, indent=1),
-                                         encoding="utf-8")
+    # "_notes" carries "install this font first" to design-choose; load_design ignores it.
+    saved = [{**d.recipe, "_notes": list(d.notes)} for d in drafts]
+    (out_dir / "drafts.json").write_text(json.dumps(saved, ensure_ascii=False, indent=1), encoding="utf-8")
     return index

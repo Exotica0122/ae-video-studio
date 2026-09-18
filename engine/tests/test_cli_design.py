@@ -58,6 +58,27 @@ class CliDesignTest(unittest.TestCase):
         recipe = json.loads(design_path.read_text(encoding="utf-8"))
         self.assertEqual(recipe["id"], info["drafts"][0])
 
+    def _drafts_json_with_an_uninstalled_font(self):
+        drafts = json.loads((self.preview / "drafts.json").read_text(encoding="utf-8"))
+        drafts = drafts[:1]
+        drafts[0]["tokens"]["type"]["headline"] = {"font": "GowunBatang-Bold", "family": "Gowun Batang", "size": 150}
+        drafts[0]["_notes"] = ["install Gowun Batang first: SIL Open Font License 1.1 — https://example.test"]
+        (self.preview / "drafts.json").write_text(json.dumps(drafts, ensure_ascii=False), encoding="utf-8")
+        return drafts[0]["id"]
+
+    def test_choose_warns_about_an_uninstalled_font(self):
+        self._propose()
+        draft_id = self._drafts_json_with_an_uninstalled_font()
+        err, out = io.StringIO(), io.StringIO()
+        with redirect_stderr(err), redirect_stdout(out):
+            code = main(["design-choose", "--dir", str(self.preview), "--out", str(self.root / "design.json"),
+                         "--id", draft_id])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out.getvalue())["id"], draft_id)
+        warnings = err.getvalue()
+        self.assertIn("install Gowun Batang first", warnings)
+        self.assertIn("GowunBatang-Bold", warnings)
+
     def test_choose_without_a_choice_fails(self):
         self._propose()
         err = io.StringIO()

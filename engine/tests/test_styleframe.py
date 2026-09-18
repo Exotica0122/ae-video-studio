@@ -66,6 +66,14 @@ class StyleFrameTest(unittest.TestCase):
         for note in notes:
             self.assertIn(note.split(":")[0], html)
 
+    def test_drafts_json_keeps_the_install_notes(self):
+        draft = self.drafts[0]
+        draft.notes = ["install Gowun Batang first: SIL Open Font License 1.1 — https://example.test"]
+        styleframe.render_mockups([draft], self.log, self.root / "preview4")
+        saved = json.loads((self.root / "preview4" / "drafts.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved[0]["_notes"], draft.notes)
+        self.assertEqual(saved[0]["id"], draft.id)
+
     def test_missing_frames_do_not_crash(self):
         log = json.loads(json.dumps(LOG))
         log["root"] = str(self.analysis)

@@ -11,7 +11,7 @@ from .components.layout import LayoutError
 from .design import DesignError, load_design
 from .designgen import DesignGenError, Draft, propose, save_design, style_frame_plan
 from .footage import log_footage
-from .fonts import FontError
+from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
 from .media import MediaError
 from .ops import OpsError
@@ -126,7 +126,26 @@ def _load_log(analysis):
 
 def _drafts_from_dir(directory):
     recipes = json.loads((Path(directory) / "drafts.json").read_text(encoding="utf-8"))
-    return [Draft(id=r["id"], name=r.get("name", r["id"]), mood=r.get("mood", []), recipe=r) for r in recipes]
+    drafts = []
+    for raw in recipes:
+        recipe = dict(raw)
+        notes = recipe.pop("_notes", [])
+        drafts.append(Draft(id=recipe["id"], name=recipe.get("name", recipe["id"]), mood=recipe.get("mood", []),
+                            recipe=recipe, fonts={r: s["font"] for r, s in recipe["tokens"]["type"].items()},
+                            notes=list(notes)))
+    return drafts
+
+
+def _font_warnings(design) -> list:
+    """After Effects substitutes a missing font silently, so say so before anything is built."""
+    catalogue, files, out = load_catalogue(), installed_files(), []
+    for name in sorted(design.fonts()):
+        font = next((f for f in catalogue if name in f.postscript.values()), None)
+        if font is None:
+            out.append(f"{name} is not in the font catalogue — check it is installed before building")
+        elif not is_installed(font, files):
+            out.append(f"install {font.family} first ({name}): {font.licence} — {font.url}")
+    return out
 
 
 def _pick(directory, draft_id):
@@ -167,7 +186,11 @@ def cmd_design_preview(a):
 def cmd_design_choose(a):
     draft, note = _pick(a.dir, a.id)
     path = save_design(draft, a.out)
-    print(json.dumps({"design": str(path), "id": draft.id, "note": note}, ensure_ascii=False))
+    warnings = list(dict.fromkeys(list(draft.notes) + _font_warnings(load_design(path))))
+    for line in warnings:
+        print(f"warning: {line}", file=sys.stderr)
+    print(json.dumps({"design": str(path), "id": draft.id, "note": note, "warnings": warnings},
+                     ensure_ascii=False))
     return 0
 
 
