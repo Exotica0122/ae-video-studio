@@ -38,6 +38,16 @@ class _Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass                                    # keep the terminal clean
 
+    def translate_path(self, path):
+        candidate = Path(super().translate_path(path))
+        try:
+            resolved = candidate.resolve()
+            resolved.relative_to(self._root)
+        except (OSError, ValueError):
+            # escapes the served directory (e.g. via a symlink) — make it 404, no body leak
+            return str(self._root / ".aestudio-preview-denied")
+        return str(candidate)
+
     def _json(self, status: int, payload: dict):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -59,6 +69,8 @@ class _Handler(SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
         except (ValueError, UnicodeDecodeError):
             return self._json(400, {"ok": False, "error": "body must be JSON"})
+        if not isinstance(payload, dict):
+            return self._json(400, {"ok": False, "error": "body must be a JSON object"})
         draft_id = payload.get("id")
         known = _known_ids(self._root)
         if not isinstance(draft_id, str) or not draft_id or (known and draft_id not in known):

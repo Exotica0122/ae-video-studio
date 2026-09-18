@@ -75,6 +75,33 @@ class PreviewTest(unittest.TestCase):
         server, _ = preview.serve(self.dir)
         self.assertIsNone(preview.wait_for_choice(server, self.dir, timeout=0.3, poll=0.05))
 
+    def test_symlink_escape_is_refused(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        secret = Path(outside.name) / "secret.txt"
+        secret.write_text("outside contents", encoding="utf-8")
+        link = self.dir / "escape.txt"
+        try:
+            link.symlink_to(secret)
+        except OSError:
+            self.skipTest("symlinks not supported on this filesystem")
+        self.server, url = preview.serve(self.dir)
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            get(url + "/escape.txt")
+        self.assertIn(cm.exception.code, (403, 404))
+        self.assertNotIn(b"outside contents", cm.exception.read())
+
+    def test_non_object_json_bodies_are_refused(self):
+        self.server, url = preview.serve(self.dir)
+        for bad_payload in (None, [1, 2, 3], "foo"):
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                post(url + "/choose", bad_payload)
+            self.assertEqual(cm.exception.code, 400)
+        self.assertIsNone(preview.read_choice(self.dir))
+        status, reply = get(url + "/choice")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(reply), {})
+
 
 if __name__ == "__main__":
     unittest.main()
