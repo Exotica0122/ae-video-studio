@@ -36,6 +36,17 @@ class FontsTest(unittest.TestCase):
                                    scripts=["latin"], style="sans")
             self.assertTrue(fonts.is_installed(findable, dirs=[Path(d)]))
 
+    def test_nanumsquareneo_postscript_names_differ_from_file_stems(self):
+        # Regression test: After Effects sets fonts by PostScript name, and
+        # NanumSquareNeo's real PostScript names ("NanumSquareNeoTTF-*") differ
+        # from its installed file stems ("NanumSquareNeo-*"). The catalogue must
+        # keep the real PostScript names for AE while still being detected as
+        # installed via the separate `files` list.
+        neo = {f.id: f for f in fonts.load_catalogue()}["nanumsquareneo"]
+        for name in neo.postscript.values():
+            self.assertTrue(name.startswith("NanumSquareNeoTTF-"), name)
+        self.assertTrue(fonts.is_installed(neo, fonts.installed_files()))
+
     def test_pairings_prefer_installed_and_mix_styles(self):
         pairs = fonts.pairings(["warm", "friendly"], scripts=("ko",))
         self.assertTrue(pairs)

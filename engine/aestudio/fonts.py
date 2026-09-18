@@ -27,6 +27,7 @@ class Font:
     moods: list = field(default_factory=list)
     licence: str = ""
     url: str = ""
+    files: list = field(default_factory=list)
 
     def weight(self, preferences) -> str:
         for want in preferences:
@@ -61,10 +62,14 @@ def load_catalogue(path=CATALOGUE) -> list:
             errors.append(f"{where}: 'licence' is required (it travels with the font)")
         if not entry.get("url"):
             errors.append(f"{where}: 'url' is required")
+        files = entry.get("files", [])
+        if not isinstance(files, list) or not all(isinstance(x, str) for x in files):
+            errors.append(f"{where}: 'files' must be a list of font file stems when present")
+            files = []
         catalogue.append(Font(id=fid, family=entry.get("family", fid), postscript=entry.get("postscript", {}),
                               scripts=list(entry.get("scripts", [])), style=entry.get("style", ""),
                               moods=list(entry.get("moods", [])), licence=entry.get("licence", ""),
-                              url=entry.get("url", "")))
+                              url=entry.get("url", ""), files=list(files)))
     if errors:
         raise FontError(f"{path}:\n  " + "\n  ".join(errors))
     return catalogue
@@ -84,8 +89,8 @@ def installed_files(dirs=FONT_DIRS) -> set:
 
 def is_installed(font: Font, files=None, dirs=FONT_DIRS) -> bool:
     files = installed_files(dirs) if files is None else files
-    names = list(font.postscript.values())
-    return bool(names) and all(name.lower() in files for name in names)
+    stems = font.files if font.files else list(font.postscript.values())
+    return bool(stems) and all(stem.lower() in files for stem in stems)
 
 
 def _score(font: Font, moods) -> int:
