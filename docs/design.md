@@ -249,10 +249,14 @@ Grade
    render. Then re-render the same edit with the second design, changing only `design`.
    Add a small fictional example under `examples/` for anyone else to test with.
 6. **`audio-post`** and **`video-qa`** scripts (ducking, placement, loudness, legibility checks).
-7. **`footage-logging`** and **`color-grade`** (luma matching, look previews).
+7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) is not
+   part of this milestone.
 8. **`design-system`** gate 2: generating new directions, style frames, font pairings,
-   `preview/index.html`, "save this design".
+   `preview/index.html`, "save this design". *(done, Milestone 2a)*
 9. **`video-director`** orchestration + `studio-doctor`.
+
+Milestone 2a shipped `footage-logging` and `design-system` (steps 7–8, minus `color-grade`). What
+remains: grade previews, `audio-post`, `video-qa`, `video-director`, `studio-doctor`.
 10. Try on a second, different kind of video; fix what doesn't generalise.
 
 ## 10. Open questions

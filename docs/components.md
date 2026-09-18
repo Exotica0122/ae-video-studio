@@ -17,7 +17,9 @@ spoken words (punctuation and extra spoken words are ignored).
 {"type": "caption", "voice": "N1", "lines": [[...], [...]], "place": "bottom-left", "in": 9.7, "out": 14.0}
 ```
 
-- `voice` (required): id from `voices`; words reveal as they are spoken.
+- `voice` (required): id from `voices`; words reveal as they are spoken. `null` for a voiceless caption
+  (no matching narration) — then `in` and `out` are required (no onset/offset to default from), and
+  words reveal on a schedule: the first word 0.35 s after `in`, then 0.12 s per word, with 0.3 s between lines.
 - `place`: `bottom-left | top-left | bottom-right | top-right | lower-center | top-center | center`.
 - `in` / `out`: default a little before the voice onset and after its offset.
 
