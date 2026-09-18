@@ -74,9 +74,14 @@ def accent_from_footage(log, fallback=FALLBACK_ACCENT) -> str:
 
 def _recipe(arch, pairing, accent) -> dict:
     scale = float(arch.get("type_scale", 1.0))
+    # A font's PostScript name (what After Effects needs) is not its browser family name
+    # (what the mockup CSS needs), so carry both. load_design ignores the extra key.
+    families = {ps: font.family for font in (pairing["headline"], pairing["body"], pairing["quote"])
+                for ps in font.postscript.values()}
     type_block = {}
     for role, name in fontlib.fonts_for(pairing, ROLES).items():
-        type_block[role] = {"font": name, "size": round(BASE_SIZES[role] * scale, 1)}
+        type_block[role] = {"font": name, "family": families.get(name, name),
+                            "size": round(BASE_SIZES[role] * scale, 1)}
     palette = dict(arch["palette"])
     if arch.get("accent_from_footage"):
         palette["accent"] = accent

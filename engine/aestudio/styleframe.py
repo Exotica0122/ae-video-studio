@@ -14,8 +14,14 @@ END_ROWS = [("안내", ["첫째 줄", "둘째 줄"]), ("문의", ["예시 · 000
 
 
 def _family(postscript: str) -> str:
-    """'Paperlogy-7Bold' -> 'Paperlogy' — browsers match installed fonts by family name."""
+    """'Paperlogy-7Bold' -> 'Paperlogy' — last resort when a recipe carries no family name."""
     return postscript.split("-")[0]
+
+
+def _family_of(spec: dict) -> str:
+    """Browsers match installed fonts by family name ('NanumSquare Neo'), not by the
+    PostScript name After Effects needs ('NanumSquareNeoTTF-bRg')."""
+    return spec.get("family") or _family(spec["font"])
 
 
 def _tokens(draft):
@@ -29,7 +35,7 @@ def _is_paper(draft) -> bool:
 
 def mockup_css(draft) -> str:
     palette, type_block = _tokens(draft)
-    head, body, quote = (_family(type_block[r]["font"]) for r in ("headline", "body", "quote"))
+    head, body, quote = (_family_of(type_block[r]) for r in ("headline", "body", "quote"))
     return f"""
 .d-{draft.id} {{ --paper: {palette['paper']}; --ink: {palette['ink']}; --accent: {palette['accent']};
   --accent2: {palette['accent2']}; --rule: {palette['rule']}; --shade: {palette['shade']};
@@ -88,7 +94,7 @@ def _draft_section(draft, frame_rel, lines) -> str:
                    f'<span class="values">{"<br>".join(html.escape(v) for v in values)}</span></div>'
                    for label, values in END_ROWS)
     notes = "".join(f'<li>{html.escape(n)}</li>' for n in draft.notes)
-    fonts_used = ", ".join(dict.fromkeys(_family(spec["font"]) for spec in type_block.values()))
+    fonts_used = ", ".join(dict.fromkeys(_family_of(spec) for spec in type_block.values()))
     return f"""
 <section class="draft d-{html.escape(draft.id)}" data-id="{html.escape(draft.id)}">
   <header>

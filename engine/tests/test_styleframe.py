@@ -43,7 +43,14 @@ class StyleFrameTest(unittest.TestCase):
         draft = self.drafts[0]
         css = styleframe.mockup_css(draft)
         self.assertIn(draft.recipe["tokens"]["palette"]["accent"], css)
-        self.assertIn(draft.recipe["tokens"]["type"]["headline"]["font"].split("-")[0], css)
+        self.assertIn(draft.recipe["tokens"]["type"]["headline"]["family"], css)
+
+    def test_css_uses_the_real_browser_family_name(self):
+        drafts = designgen.propose(["restrained", "premium"], log=self.log)
+        cinematic = next(d for d in drafts if d.id.startswith("cinematic-minimal"))
+        css = styleframe.mockup_css(cinematic)
+        self.assertIn("'NanumSquare Neo'", css)
+        self.assertNotIn("NanumSquareNeoTTF", css)
 
     def test_caption_html_marks_the_highlight(self):
         html = styleframe.caption_html(self.drafts[0], [["작은 "], [{"hl": "한 걸음"}], ["에서"]])
