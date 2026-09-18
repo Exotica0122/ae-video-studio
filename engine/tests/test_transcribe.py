@@ -21,6 +21,13 @@ class TranscribeTest(unittest.TestCase):
         out = transcribe.to_engine({"words": [{"word": "hello", "start": 1.0, "end": 1.4}]})
         self.assertEqual(out["words"], [["hello", 1.0, 1.4]])
 
+    def test_segment_and_top_level_words_are_alternatives_not_extras(self):
+        both = dict(WHISPER, words=[{"word": " 모든", "start": 0.1, "end": 0.5},
+                                    {"word": " 여정은", "start": 0.5, "end": 1.1},
+                                    {"word": " 작은", "start": 1.2, "end": 1.6}])
+        out = transcribe.to_engine(both)
+        self.assertEqual(out["words"], [["모든", 0.1, 0.5], ["여정은", 0.5, 1.1], ["작은", 1.2, 1.6]])
+
     def test_to_engine_rejects_empty(self):
         with self.assertRaises(transcribe.TranscribeError):
             transcribe.to_engine({"segments": []})

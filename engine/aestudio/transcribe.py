@@ -23,10 +23,11 @@ def whisper_command(audio, outdir, template=None) -> list:
 
 
 def _words(data: dict) -> list:
-    raw = []
+    segment_words = []
     for segment in data.get("segments") or []:
-        raw += list(segment.get("words") or [])
-    raw += list(data.get("words") or [])
+        segment_words += list(segment.get("words") or [])
+    # The two shapes are alternatives: a build emitting both would otherwise duplicate every word.
+    raw = segment_words or list(data.get("words") or [])
     words = []
     for item in raw:
         text = str(item.get("word", item.get("text", ""))).strip()
