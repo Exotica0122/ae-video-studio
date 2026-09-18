@@ -76,6 +76,13 @@ class DesignGenTest(unittest.TestCase):
         self.assertEqual({g["type"] for g in plan.graphics}, {"caption", "lower-third", "end-card"})
         self.assertTrue(plan.shots)
 
+    def test_propose_looks_for_fonts_where_it_is_told_to(self):
+        from aestudio.fonts import FontError
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises((FontError, designgen.DesignGenError)) as caught:
+                designgen.propose(["warm"], log=LOG, dirs=(Path(d),))
+        self.assertIn("installed", str(caught.exception))
+
     def test_propose_without_a_log_still_works(self):
         drafts = designgen.propose(["modern"], log=None)
         self.assertTrue(drafts)

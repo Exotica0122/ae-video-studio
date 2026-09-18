@@ -94,7 +94,8 @@ def _recipe(arch, pairing, accent) -> dict:
             "grade_hint": arch.get("grade_hint", ""), "sfx_hint": list(arch.get("sfx_hint", []))}
 
 
-def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archetypes=None, limit=3) -> list:
+def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archetypes=None, limit=3,
+            catalogue=None, dirs=fontlib.FONT_DIRS) -> list:
     archetypes = archetypes or load_archetypes()
     moods = [m.lower() for m in brief_moods or []]
     ranked = sorted(archetypes, key=lambda a: (-len(set(moods) & {m.lower() for m in a.get("moods", [])}), a["id"]))
@@ -102,7 +103,7 @@ def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archety
     drafts, used = [], set()
     for arch in ranked:
         pairs = fontlib.pairings(arch.get("font_moods") or arch.get("moods", []), scripts=scripts,
-                                 installed_only=installed_only)
+                                 catalogue=catalogue, installed_only=installed_only, dirs=dirs)
         for pairing in pairs:
             key = (arch["id"], pairing["headline"].id)
             if key in used:

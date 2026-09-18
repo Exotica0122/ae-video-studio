@@ -97,9 +97,9 @@ def _score(font: Font, moods) -> int:
     return len(set(m.lower() for m in moods) & set(m.lower() for m in font.moods))
 
 
-def pairings(moods, scripts=("ko",), catalogue=None, installed_only=True) -> list:
+def pairings(moods, scripts=("ko",), catalogue=None, installed_only=True, dirs=FONT_DIRS) -> list:
     catalogue = catalogue or load_catalogue()
-    files = installed_files()
+    files = installed_files(dirs)
     usable = [f for f in catalogue if set(scripts) <= set(f.scripts)]
     if installed_only:
         usable = [f for f in usable if is_installed(f, files)]
