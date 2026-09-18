@@ -1,0 +1,10 @@
+{"id": "cinematic-minimal", "name": "Cinematic Minimal",
+ "moods": ["restrained", "emotional", "premium", "modern", "clean"],
+ "font_moods": ["modern", "neutral", "premium"],
+ "treatments": {"caption": "line-fade", "quote": "line-fade", "lower-third": "rule-wipe",
+                "title-page": "black-frame", "end-card": "centered-stack"},
+ "palette": {"paper": "#0E0F12", "ink": "#F4F1EA", "accent": "#C9A46A", "accent2": "#8FA3B8",
+             "rule": "#3A3D44", "shade": "#0E0F12"},
+ "accent_from_footage": true, "type_scale": 1.0,
+ "motion": {"in": 0.8, "out": 0.6, "word": 0.6, "rise": 0}, "texture": {"noise": 0},
+ "grade_hint": "soft-contrast-warm", "sfx_hint": ["low-whoosh", "soft-hit"]}

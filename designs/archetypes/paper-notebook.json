@@ -1,0 +1,10 @@
+{"id": "paper-notebook", "name": "Paper Notebook",
+ "moods": ["warm", "friendly", "hand-made", "hopeful", "community"],
+ "font_moods": ["warm", "friendly", "presentation"],
+ "treatments": {"caption": "paper-card", "quote": "paper-card", "lower-third": "paper-tab",
+                "title-page": "notebook-page", "end-card": "notebook-page"},
+ "palette": {"paper": "#FBF7EF", "ink": "#22304A", "accent": "#FFD84D", "accent2": "#EE7860",
+             "rule": "#DCD3C3", "shade": "#101418"},
+ "accent_from_footage": false, "type_scale": 1.0,
+ "motion": {"in": 0.6, "out": 0.45, "word": 0.35, "rise": 14}, "texture": {"noise": 4},
+ "grade_hint": "warm-airy", "sfx_hint": ["paper-slide", "page-turn", "marker"]}

@@ -1,0 +1,10 @@
+{"id": "editorial-press", "name": "Editorial Press",
+ "moods": ["editorial", "formal", "calm", "literary", "authoritative"],
+ "font_moods": ["editorial", "calm", "literary"],
+ "treatments": {"caption": "paper-card", "quote": "paper-card", "lower-third": "paper-tab",
+                "title-page": "notebook-page", "end-card": "notebook-page"},
+ "palette": {"paper": "#F3F1EC", "ink": "#1B1B1B", "accent": "#B8452F", "accent2": "#7C7A73",
+             "rule": "#D6D2C8", "shade": "#111111"},
+ "accent_from_footage": true, "type_scale": 0.92,
+ "motion": {"in": 0.5, "out": 0.4, "word": 0.3, "rise": 8}, "texture": {"noise": 2},
+ "grade_hint": "neutral-crisp", "sfx_hint": ["paper-slide", "soft-hit"]}
