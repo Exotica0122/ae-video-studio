@@ -5,6 +5,7 @@ for captions or end cards) are a later milestone — drafts may only use registe
 """
 import colorsys
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -120,10 +121,17 @@ def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archety
 
 
 def save_design(draft: Draft, out_path) -> Path:
+    """Validate first, replace second: a bad draft must not destroy a good design.json."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(draft.recipe, ensure_ascii=False, indent=1), encoding="utf-8")
-    load_design(out_path)          # fails loudly if the draft is not a valid design
+    tmp = out_path.with_name(f".{out_path.name}.tmp.json")      # same directory, so os.replace is atomic
+    tmp.write_text(json.dumps(draft.recipe, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        load_design(tmp)           # fails loudly if the draft is not a valid design
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, out_path)
     return out_path
 
 

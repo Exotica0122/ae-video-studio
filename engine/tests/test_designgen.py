@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from aestudio import designgen
-from aestudio.design import COMPONENTS, ROLES, load_design
+from aestudio.design import COMPONENTS, ROLES, DesignError, load_design
 from aestudio.components import REGISTRY
 
 LOG = {"clips": [
@@ -50,6 +50,17 @@ class DesignGenTest(unittest.TestCase):
         self.assertEqual(design.id, draft.id)
         self.assertEqual(set(design.components), set(COMPONENTS))
         self.assertTrue(design.fonts())
+
+    def test_a_rejected_draft_leaves_the_previous_design_intact(self):
+        good = designgen.propose(["calm"], log=LOG)[0]
+        with tempfile.TemporaryDirectory() as d:
+            path = designgen.save_design(good, Path(d) / "design.json")
+            before = path.read_text(encoding="utf-8")
+            broken = designgen.Draft(id="broken", name="broken", mood=[], recipe={"id": "broken"})
+            with self.assertRaises(DesignError):
+                designgen.save_design(broken, path)
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
+            self.assertEqual([p.name for p in Path(d).iterdir()], ["design.json"])
 
     def test_style_frame_plan_is_a_valid_edit_plan(self):
         from aestudio.plan import load_plan
