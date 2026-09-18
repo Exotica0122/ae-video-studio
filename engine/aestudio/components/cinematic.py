@@ -14,9 +14,9 @@ def _shadow(ctx, layer_id):
 def caption_line_fade(ctx, g, opts):
     d, ops = ctx.design, ctx.ops
     quote = g["type"] == "quote"
-    vt = ctx.voices[g["voice"]]
-    t_in = r3(g.get("in", vt.onset - 0.4))
-    t_out = r3(g.get("out", vt.offset + 0.6))
+    vt = ctx.voices.get(g["voice"]) if g.get("voice") else None
+    t_in = r3(g["in"]) if g.get("in") is not None else r3(vt.onset - 0.4)
+    t_out = r3(g["out"]) if g.get("out") is not None else r3(vt.offset + 0.6)
     base = "quote" if quote else "body"
     raw = [list(line) for line in g["lines"]]
     if quote:
@@ -33,7 +33,8 @@ def caption_line_fade(ctx, g, opts):
         return {"font": d.font("emphasis" if seg.hl and not quote else base), "size": ctx.size(base),
                 "color": d.color("accent" if seg.hl else "ink")}
 
-    block = text_block(ctx, prefix=cid, parent=cid, lines=lines, times=segment_times(lines, vt.words), x=x, y_first=y0, gap=gap,
+    times = segment_times(lines, vt.words) if vt else schedule_times(lines, t_in + 0.35, 0.12, 0.3)
+    block = text_block(ctx, prefix=cid, parent=cid, lines=lines, times=times, x=x, y_first=y0, gap=gap,
                        style=style, align=align, reveal={"dur": d.motion["word"], "rise": ctx.px(d.motion["rise"]), "blur": 10, "by": "words"},
                        opacity=fade_ref(cid), t_in=t_in, t_out=r3(t_out + 0.1))
     for sid in block.ids:

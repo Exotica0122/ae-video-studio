@@ -10,9 +10,9 @@ from .layout import STATIC, T_END, fade_ref, highlighter, paper_card, parse_line
 def caption_paper_card(ctx, g, opts):
     d, ops = ctx.design, ctx.ops
     quote = g["type"] == "quote"
-    vt = ctx.voices[g["voice"]]
-    t_in = r3(g.get("in", vt.onset - 0.3))
-    t_out = r3(g.get("out", vt.offset + 0.5))
+    vt = ctx.voices.get(g["voice"]) if g.get("voice") else None
+    t_in = r3(g["in"]) if g.get("in") is not None else r3(vt.onset - 0.3)
+    t_out = r3(g["out"]) if g.get("out") is not None else r3(vt.offset + 0.5)
     lead, emph = ("quote", "quote") if quote else ("body", "emphasis")
     lines = [parse_line(line, ctx.size(lead, 0.28)) for line in g["lines"]]
     roles = [emph if any(s.hl for s in segs) else lead for segs in lines]
@@ -27,7 +27,7 @@ def caption_paper_card(ctx, g, opts):
     fade = fade_ref(cid)
     out = r3(t_out + 0.1)
     ink = d.color("ink")
-    times = segment_times(lines, vt.words)
+    times = segment_times(lines, vt.words) if vt else schedule_times(lines, t_in + 0.35, 0.12, 0.3)
     block = text_block(ctx, prefix=cid, parent=cid, lines=lines, times=times, x=x, y_first=y0, gap=gap,
                        style=lambda i, s: {"font": d.font(roles[i]), "size": ctx.size(roles[i]), "color": ink}, align="left",
                        reveal={"dur": d.motion["word"], "rise": ctx.px(d.motion["rise"]), "blur": 6, "by": "words"},

@@ -155,8 +155,13 @@ def load_plan(path, check_files: bool = True) -> Plan:
         gtype = g.get("type")
         if gtype not in GRAPHIC_TYPES:
             c.errors.append(f"{where}: unknown type '{gtype}' (expected one of {', '.join(GRAPHIC_TYPES)})")
-        if gtype in ("caption", "quote") and g.get("voice") not in seen:
-            c.errors.append(f"{where}: unknown voice '{g.get('voice')}'")
+        if gtype in ("caption", "quote"):
+            voice = g.get("voice")
+            if voice is None:
+                if g.get("in") is None or g.get("out") is None:
+                    c.errors.append(f"{where}: a caption without a voice needs 'in' and 'out'")
+            elif voice not in seen:
+                c.errors.append(f"{where}: unknown voice '{voice}'")
         if gtype == "end-card":
             if isinstance(g.get("photo"), dict):
                 p = c.path(g["photo"], "clip", where + ".photo")
