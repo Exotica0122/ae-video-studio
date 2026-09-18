@@ -81,6 +81,17 @@ class StyleFrameTest(unittest.TestCase):
         index = styleframe.render_mockups(self.drafts, log, self.root / "preview3")
         self.assertTrue(index.exists())
 
+    def test_falls_back_to_image_previews_when_there_are_no_clip_frames(self):
+        (self.analysis / "frames" / "photo-abc123.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+        log = {"clips": [], "audio": [], "errors": [], "root": str(self.analysis),
+               "images": [{"path": "/tmp/photo.jpg", "name": "photo.jpg", "width": 320, "height": 240,
+                          "luma": 0.5, "colors": [[1, 2, 3]] * 4, "file": "frames/photo-abc123.jpg"}]}
+        drafts = designgen.propose(["warm", "modern"], log=log)
+        index = styleframe.render_mockups(drafts, log, self.root / "preview5")
+        html = index.read_text(encoding="utf-8")
+        self.assertIn('<img class="bg" src="frames/photo-abc123.jpg"', html)
+        self.assertTrue((self.root / "preview5" / "frames" / "photo-abc123.jpg").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

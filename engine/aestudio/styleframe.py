@@ -67,19 +67,32 @@ def caption_html(draft, lines=None) -> str:
     return "".join(out)
 
 
-def _frames(log, out_dir) -> list:
+def _frames(log, out_dir, needed: int = 1) -> list:
+    """One frame per clip, in priority order. A shoot with fewer clip frames than drafts
+    (photo-only, or photo-heavy) fills the rest from image previews so mockups still get
+    real backgrounds instead of placeholders."""
     root = Path(log.get("root") or ".")
     copied = []
     (out_dir / "frames").mkdir(parents=True, exist_ok=True)
+
+    def _copy(rel) -> bool:
+        src = root / rel
+        if not src.exists():
+            return False
+        dest = out_dir / "frames" / Path(rel).name
+        shutil.copyfile(src, dest)
+        copied.append(f"frames/{dest.name}")
+        return True
+
     for clip in log.get("clips", []):
         for frame in clip.get("frames", []):
-            src = root / frame["file"]
-            if not src.exists():
-                continue
-            dest = out_dir / "frames" / Path(frame["file"]).name
-            shutil.copyfile(src, dest)
-            copied.append(f"frames/{dest.name}")
-            break
+            if _copy(frame["file"]):
+                break
+    if len(copied) < needed:
+        for image in log.get("images", []):
+            if len(copied) >= needed:
+                break
+            _copy(image["file"])
     return copied
 
 
@@ -177,7 +190,7 @@ document.querySelectorAll('button.choose').forEach(function (b) {
 def render_mockups(drafts, log, out_dir, script_lines=None, title="Design directions") -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    frames = _frames(log, out_dir)
+    frames = _frames(log, out_dir, needed=len(drafts))
     sections, css = [], []
     for i, draft in enumerate(drafts):
         sections.append(_draft_section(draft, frames[i % len(frames)] if frames else None, script_lines))

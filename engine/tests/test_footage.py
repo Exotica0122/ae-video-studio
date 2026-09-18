@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -75,6 +76,51 @@ class FootageTest(unittest.TestCase):
         finally:
             os.chdir(cwd)
         self.assertTrue(Path(log["clips"][0]["path"]).is_absolute(), log["clips"][0]["path"])
+
+    def _make_jpeg(self, path: Path, color="red", size="320x240"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                        "-i", f"color=c={color}:s={size}", "-frames:v", "1", str(path)], check=True)
+
+    def test_logs_a_jpeg_under_images(self):
+        photo = self.out / "src" / "photo.jpg"
+        self._make_jpeg(photo)
+        log = footage.log_footage([photo.parent], self.out / "analysis")
+        self.assertEqual(log["errors"], [])
+        self.assertEqual(len(log["images"]), 1)
+        entry = log["images"][0]
+        self.assertEqual(entry["name"], "photo.jpg")
+        self.assertTrue(Path(entry["path"]).is_absolute())
+        self.assertEqual(entry["width"], 320)
+        self.assertEqual(entry["height"], 240)
+        self.assertTrue(0 <= entry["luma"] <= 1)
+        self.assertEqual(len(entry["colors"]), 4)
+        self.assertTrue((self.out / "analysis" / entry["file"]).exists())
+        self.assertEqual(log["clips"], [])          # a still image is not a clip
+
+    def test_same_named_images_in_different_folders_do_not_collide(self):
+        for day in ("day1", "day2"):
+            self._make_jpeg(self.out / "src" / day / "photo.jpg", color=("red" if day == "day1" else "blue"))
+        analysis = self.out / "analysis"
+        log = footage.log_footage([self.out / "src" / "day1", self.out / "src" / "day2"], analysis)
+        self.assertEqual(len(log["images"]), 2)
+        first, second = log["images"]
+        self.assertNotEqual(first["file"], second["file"])
+        for entry in log["images"]:
+            self.assertTrue((analysis / entry["file"]).exists(), entry["file"])
+
+    def test_xml_sidecar_is_ignored_and_a_corrupt_jpeg_is_an_error(self):
+        folder = self.out / "src"
+        folder.mkdir(parents=True)
+        (folder / "shot_a.xml").write_text("<xmeml/>")
+        (folder / "bad.jpg").write_text("not a jpeg")
+        good = folder / "photo.jpg"
+        self._make_jpeg(good)
+        log = footage.log_footage([folder], self.out / "analysis")
+        self.assertEqual(len(log["images"]), 1)
+        self.assertEqual(log["images"][0]["name"], "photo.jpg")
+        self.assertEqual(len(log["errors"]), 1)
+        self.assertIn("bad.jpg", log["errors"][0])
 
 
 if __name__ == "__main__":

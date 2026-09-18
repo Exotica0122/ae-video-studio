@@ -76,6 +76,20 @@ class CliTest(unittest.TestCase):
                     bridge.return_value.run.return_value = result
                     self.assertEqual(main(["run", str(jsx)]), 1, result)
 
+    def test_log_footage_summary_includes_images(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake_log = {"clips": [{"name": "a.mp4"}], "audio": [], "images": [{"name": "p.jpg"}, {"name": "q.jpg"}],
+                       "errors": []}
+            with mock.patch("aestudio.__main__.log_footage", return_value=fake_log) as log_footage, \
+                 redirect_stdout(io.StringIO()) as out:
+                code = main(["log-footage", d, "--out", str(Path(d) / "analysis")])
+            self.assertEqual(code, 0)
+            log_footage.assert_called_once()
+            summary = json.loads(out.getvalue())
+            self.assertEqual(summary["clips"], 1)
+            self.assertEqual(summary["images"], 2)
+            self.assertEqual(summary["errors"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

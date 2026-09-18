@@ -98,8 +98,8 @@ def cmd_render(a):
 
 def cmd_log_footage(a):
     log = log_footage(a.sources, a.out, every=a.every, max_frames=a.max_frames)
-    print(json.dumps({"clips": len(log["clips"]), "audio": len(log["audio"]), "errors": len(log["errors"]),
-                      "out": str(Path(a.out).resolve())}, ensure_ascii=False))
+    print(json.dumps({"clips": len(log["clips"]), "audio": len(log["audio"]), "images": len(log["images"]),
+                      "errors": len(log["errors"]), "out": str(Path(a.out).resolve())}, ensure_ascii=False))
     return 0
 
 

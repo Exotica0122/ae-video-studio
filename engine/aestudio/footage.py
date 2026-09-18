@@ -8,6 +8,8 @@ from .media import MediaError, average_color, contact_sheet, extract_frame, mean
 
 VIDEO_SUFFIXES = (".mp4", ".mov", ".mxf", ".m4v", ".avi")
 AUDIO_SUFFIXES = (".wav", ".m4a", ".mp3", ".aif", ".aiff")
+# RAW and HEIC are left out: ffmpeg on this machine cannot reliably decode them.
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")
 
 
 def _candidates(sources) -> list:
@@ -20,7 +22,7 @@ def _candidates(sources) -> list:
             files.append(source)
     keep, seen = [], set()
     for f in files:
-        if f.name.startswith("._") or f.suffix.lower() not in VIDEO_SUFFIXES + AUDIO_SUFFIXES:
+        if f.name.startswith("._") or f.suffix.lower() not in VIDEO_SUFFIXES + AUDIO_SUFFIXES + IMAGE_SUFFIXES:
             continue
         if f.resolve() not in seen:
             seen.add(f.resolve())
@@ -46,9 +48,24 @@ def log_footage(sources, out_dir, every: float = 4.0, max_frames: int = 6, sheet
     out_dir = Path(out_dir)
     (out_dir / "frames").mkdir(parents=True, exist_ok=True)
     (out_dir / "sheets").mkdir(parents=True, exist_ok=True)
-    log = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "clips": [], "audio": [], "errors": []}
+    log = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "clips": [], "audio": [],
+           "images": [], "errors": []}
 
     for path in _candidates(sources):
+        if path.suffix.lower() in IMAGE_SUFFIXES:
+            tag = _tag(path)
+            rel = f"frames/{path.stem}-{tag}.jpg"
+            try:
+                info = probe(path)
+                extract_frame(path, 0, out_dir / rel, width=frame_width)
+                luma = mean_luma(path, 0)
+                colors = [list(c) for c in average_color(path, 0, grid=2)]
+            except MediaError as e:
+                log["errors"].append(f"{path.name}: {e}")
+                continue
+            log["images"].append({"path": str(path), "name": path.name, "width": info.width, "height": info.height,
+                                  "luma": luma, "colors": colors, "file": rel})
+            continue
         try:
             info = probe(path)
         except MediaError as e:
