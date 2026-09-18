@@ -1,4 +1,5 @@
 """Log a folder of footage: probe every clip, sample frames, measure brightness and colour."""
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,11 @@ def _candidates(sources) -> list:
     return keep
 
 
+def _tag(path: Path) -> str:
+    """Keep same-named clips from different folders (day1/interview.mp4, day2/interview.mp4) apart."""
+    return hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:6]
+
+
 def _frame_times(duration: float, every: float, max_frames: int) -> list:
     times, t = [], 0.5
     while len(times) < max_frames and t < max(duration - 0.2, 0.5):
@@ -52,8 +58,9 @@ def log_footage(sources, out_dir, every: float = 4.0, max_frames: int = 6, sheet
             log["audio"].append({"path": str(path), "name": path.name, "duration": info.duration})
             continue
         frames, lumas = [], []
+        tag = _tag(path)
         for at in _frame_times(info.duration, every, max_frames):
-            rel = f"frames/{path.stem}_{at}.jpg"
+            rel = f"frames/{path.stem}-{tag}_{at}.jpg"
             try:
                 extract_frame(path, at, out_dir / rel, width=frame_width)
                 luma = mean_luma(path, at)
@@ -67,7 +74,7 @@ def log_footage(sources, out_dir, every: float = 4.0, max_frames: int = 6, sheet
                  "fps": info.fps, "duration": info.duration, "has_audio": info.has_audio,
                  "luma": round(sum(lumas) / len(lumas), 4) if lumas else None, "frames": frames}
         if frames:
-            sheet = f"sheets/{path.stem}.jpg"
+            sheet = f"sheets/{path.stem}-{tag}.jpg"
             try:
                 contact_sheet([out_dir / f["file"] for f in frames], out_dir / sheet, cols=sheet_cols,
                               tile_width=max(160, frame_width // 2))

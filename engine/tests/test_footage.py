@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,6 +49,22 @@ class FootageTest(unittest.TestCase):
         log = footage.log_footage([DEMO / "shot_a.mp4"], self.out, every=10.0, max_frames=6)
         ats = [f["at"] for f in log["clips"][0]["frames"]]
         self.assertTrue(all(a < log["clips"][0]["duration"] for a in ats), ats)
+
+    def test_same_named_clips_in_different_folders_do_not_collide(self):
+        for day in ("day1", "day2"):
+            folder = self.out / "src" / day
+            folder.mkdir(parents=True)
+            shutil.copyfile(DEMO / "shot_a.mp4", folder / "interview.mp4")
+        analysis = self.out / "analysis"
+        log = footage.log_footage([self.out / "src" / "day1", self.out / "src" / "day2"], analysis,
+                                  every=10.0, max_frames=2)
+        self.assertEqual([c["name"] for c in log["clips"]], ["interview.mp4", "interview.mp4"])
+        first, second = log["clips"]
+        self.assertNotEqual(first["frames"][0]["file"], second["frames"][0]["file"])
+        self.assertNotEqual(first["sheet"], second["sheet"])
+        for clip in log["clips"]:
+            for rel in [f["file"] for f in clip["frames"]] + [clip["sheet"]]:
+                self.assertTrue((analysis / rel).exists(), rel)
 
     def test_clip_path_is_absolute_even_for_a_relative_source(self):
         cwd = Path.cwd()
