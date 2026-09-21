@@ -48,7 +48,8 @@ See `docs/components.md` for the edit-plan graphics and `skills/ae-build-render/
 ```
 .claude-plugin/   plugin + dev marketplace manifests
 docs/design.md    flow, gates, skills, edit-plan format, lessons learned
-skills/           one folder per skill (in progress); ae-build-render, footage-logging, design-system
+skills/           one folder per skill (in progress); video-director, studio-doctor,
+                  ae-build-render, footage-logging, design-system
 engine/aestudio/  media.py ffprobe/ffmpeg helpers, footage.py footage logging, transcribe.py Whisper
                   import, fonts.py installed-font catalogue, designgen.py compose design drafts,
                   styleframe.py render mockup HTML, preview.py serve mockups + record the choice

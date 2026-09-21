@@ -9,6 +9,7 @@ from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
 from .components.layout import LayoutError
 from .design import DesignError, load_design
+from .doctor import DoctorError, format_report, run_checks
 from .designgen import DesignGenError, Draft, propose, save_design, style_frame_plan
 from .footage import log_footage
 from .fonts import FontError, installed_files, is_installed, load_catalogue
@@ -16,13 +17,14 @@ from .jsx import emit_script, still_script
 from .media import MediaError
 from .ops import OpsError
 from .plan import PlanError, load_plan
+from .project import ProjectError, gates, init_project, next_gate, record_decision
 from .preview import PreviewError, read_choice, serve, wait_for_choice
 from .render import RenderError, render
 from .styleframe import render_mockups
 from .timing import TimingError
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (PlanError, DesignError, DoctorError, ProjectError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -223,6 +225,48 @@ def cmd_design_styleplan(a):
     return 0
 
 
+def cmd_doctor(a):
+    fonts = None
+    if a.design:
+        fonts = sorted(load_design(a.design).fonts())
+    report = run_checks(bridge_root=a.bridge_dir, design=fonts, ping=a.ping)
+    if a.json:
+        print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(format_report(report))
+    return 1 if report.failures else 0
+
+
+def cmd_init(a):
+    created = init_project(a.dir)
+    nxt = next_gate(a.dir)
+    print(json.dumps({"root": str(Path(a.dir).expanduser().resolve()), "created": created,
+                      "next_gate": None if nxt is None else {"gate": nxt.number, "label": nxt.label}},
+                     ensure_ascii=False))
+    return 0
+
+
+def cmd_status(a):
+    rows = gates(a.dir)
+    if a.json:
+        print(json.dumps({"gates": [{"gate": g.number, "label": g.label, "artifact": g.artifact,
+                                     "done": g.done, "state": g.state} for g in rows]},
+                         ensure_ascii=False, indent=2))
+        return 0
+    mark = {"done": "x", "recorded": "~", "todo": " "}
+    for g in rows:
+        note = "  (decided, artifact not written yet)" if g.state == "recorded" else ""
+        print(f"[{mark[g.state]}] gate {g.number} {g.label:<14} {g.artifact}{note}")
+    nxt = next_gate(a.dir)
+    print(f"\nNext: gate {nxt.number} ({nxt.label})" if nxt else "\nAll gates done.")
+    return 0
+
+
+def cmd_decide(a):
+    print(str(record_decision(a.dir, a.gate, a.what, a.detail or "")))
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -300,6 +344,25 @@ def parser():
     ds.add_argument("--id")
     ds.add_argument("--lines", help="JSON array of real caption lines to typeset in the style frame")
     ds.set_defaults(fn=cmd_design_styleplan)
+    dr = sub.add_parser("doctor")
+    dr.add_argument("--design", help="also check the fonts this design needs (plan/design.json)")
+    dr.add_argument("--bridge-dir")
+    dr.add_argument("--ping", action="store_true", help="prove the bridge by running a tiny script in After Effects")
+    dr.add_argument("--json", action="store_true")
+    dr.set_defaults(fn=cmd_doctor)
+    ip = sub.add_parser("init")
+    ip.add_argument("dir")
+    ip.set_defaults(fn=cmd_init)
+    st = sub.add_parser("status")
+    st.add_argument("--dir", required=True)
+    st.add_argument("--json", action="store_true")
+    st.set_defaults(fn=cmd_status)
+    dc2 = sub.add_parser("decide")
+    dc2.add_argument("--dir", required=True)
+    dc2.add_argument("--gate", type=int, required=True)
+    dc2.add_argument("--what", required=True)
+    dc2.add_argument("--detail")
+    dc2.set_defaults(fn=cmd_decide)
     return p
 
 

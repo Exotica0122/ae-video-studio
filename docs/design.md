@@ -254,11 +254,18 @@ Grade
 8. **`design-system`** gate 2: generating new directions, style frames, font pairings,
    `preview/index.html`, "save this design". *(done, Milestone 2a — one font pairing per direction;
    offering 2–3 pairings per direction is deferred to a later milestone)*
-9. **`video-director`** orchestration + `studio-doctor`.
+9. **`video-director`** orchestration + `studio-doctor`. *(done)*
 10. Try on a second, different kind of video; fix what doesn't generalise.
 
-Milestone 2a shipped `footage-logging` and `design-system` (steps 7–8, minus `color-grade`). What
-remains: grade previews, `audio-post`, `video-qa`, `video-director`, `studio-doctor`.
+Milestone 2a shipped `footage-logging` and `design-system` (steps 7–8, minus `color-grade`).
+Step 9 shipped next: `video-director` (project layout, gate tracking, decision log) and
+`studio-doctor` (environment, bridge and font checks). What remains: grade previews,
+`audio-post`, `video-qa`.
+
+`studio-doctor` reads only files by default; `--ping` is the one opt-in that touches After
+Effects, because the bridge runs one job at a time and a diagnostic must never stall a render.
+`video-director` treats the artifact on disk as proof a gate is done — a decision logged without
+its artifact shows as `[~]`, since later stages read the artifact, not the log.
 
 ## 10. Open questions
 
