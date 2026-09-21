@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-GRAPHIC_TYPES = ("title-page", "caption", "quote", "lower-third", "end-card")
+GRAPHIC_TYPES = ("title-page", "opening", "backdrop", "scrapbook", "caption", "quote", "lower-third", "end-card", "inset", "layout")
 
 
 class PlanError(ValueError):
@@ -37,6 +37,22 @@ class Shot:
     src_in: float = 0.0
     exposure: float = 0.0
     zoom: float = 1.0
+    # Optional slow push, anchored on a point in the source rather than its centre.
+    # {"from": 1.02, "to": 1.10, "cx": 0.52, "cy": 0.43}
+    # cx/cy are 0..1 in source space - put a face there and the subject stays put
+    # while the frame moves, instead of drifting out of shot.
+    motion: dict | None = None
+    # seconds of cross-dissolve INTO this shot. 0 (the default) is a clean cut.
+    # Dissolving every join makes a cut feel mushy; dissolves should be motivated.
+    dissolve: float | None = None
+    # dB for this clip's OWN sound. None leaves the shot silent under the music,
+    # which is what a still wants; a moving shot with people talking wants to be heard.
+    gain_db: float | None = None
+    # "width" fits the picture to the frame's WIDTH instead of covering the frame.
+    # A 16:9 clip shown full-bleed in a 9:16 frame keeps 42% of its width, which
+    # throws away most of a group; fitting the width keeps all of it and bands the
+    # rest of the frame. None (the default) covers, which is right for 16:9.
+    fit: str | None = None
 
 
 @dataclass
@@ -53,6 +69,10 @@ class Music:
     gain_db: float = 0.0
     start: float = 0.0
     duck: dict = field(default_factory=dict)
+    # Extra [start, end] spans to duck under. A shot's own audio registers itself,
+    # but sound carried by a GRAPHIC - a clip inside a layout panel - is invisible
+    # to the compiler, so the plan names those spans here or the bed never dips.
+    spans: list = field(default_factory=list)
 
 
 @dataclass
@@ -135,6 +155,37 @@ def load_plan(path, check_files: bool = True) -> Plan:
         where = f"shots[{i}]"
         shot = Shot(c.path(s, "clip", where), c.num(s, "in", where), c.num(s, "out", where),
                     c.num(s, "src_in", where, 0.0), c.num(s, "exposure", where, 0.0, None), c.num(s, "zoom", where, 1.0))
+        ft = s.get("fit")
+        if ft is not None:
+            if ft not in ("width",):
+                c.errors.append(f"{where}: 'fit' must be 'width'")
+            else:
+                shot.fit = ft
+        gv = s.get("gain_db")
+        if gv is not None:
+            if not isinstance(gv, (int, float)) or isinstance(gv, bool):
+                c.errors.append(f"{where}: 'gain_db' must be a number")
+            else:
+                shot.gain_db = float(gv)
+        dv = s.get("dissolve")
+        if dv is not None:
+            if not isinstance(dv,(int,float)) or isinstance(dv,bool) or dv < 0:
+                c.errors.append(f"{where}: 'dissolve' must be a number >= 0")
+            else:
+                shot.dissolve = float(dv)
+        m = s.get("motion")
+        if m is not None:
+            if not isinstance(m, dict):
+                c.errors.append(f"{where}: 'motion' must be an object")
+            else:
+                for k in ("from", "to"):
+                    if not isinstance(m.get(k), (int, float)) or isinstance(m.get(k), bool):
+                        c.errors.append(f"{where}.motion: '{k}' must be a number")
+                for k in ("cx", "cy"):
+                    v = m.get(k, 0.5)
+                    if not isinstance(v, (int, float)) or isinstance(v, bool) or not 0.0 <= v <= 1.0:
+                        c.errors.append(f"{where}.motion: '{k}' must be between 0 and 1")
+                shot.motion = dict(m)
         if shot.end <= shot.start:
             c.errors.append(f"{where}: out must be greater than in")
         shots.append(shot)
@@ -146,7 +197,7 @@ def load_plan(path, check_files: bool = True) -> Plan:
     music = None
     if m is not None:
         music = Music(c.path(m, "file", "music"), c.num(m, "gain_db", "music", 0.0, None), c.num(m, "start", "music", 0.0),
-                      dict(m.get("duck", {})))
+                      dict(m.get("duck", {})), [tuple(sp) for sp in m.get("spans", [])])
 
     graphics = []
     for i, g in enumerate(data.get("graphics", [])):
@@ -162,13 +213,50 @@ def load_plan(path, check_files: bool = True) -> Plan:
                     c.errors.append(f"{where}: a caption without a voice needs 'in' and 'out'")
             elif voice not in seen:
                 c.errors.append(f"{where}: unknown voice '{voice}'")
-        if gtype == "end-card":
-            if isinstance(g.get("photo"), dict):
-                p = c.path(g["photo"], "clip", where + ".photo")
-                g["photo"]["clip"] = str(p) if p else None
-            if isinstance(g.get("logo"), dict):
-                p = c.path(g["logo"], "file", where + ".logo")
-                g["logo"]["file"] = str(p) if p else None
+        # Any graphic may carry a backing photo - end cards, and title pages that
+        # set their type over footage - so resolve it wherever it appears.
+        if isinstance(g.get("photo"), dict):
+            p = c.path(g["photo"], "clip", where + ".photo")
+            g["photo"]["clip"] = str(p) if p else None
+        for j, ph in enumerate(g.get("photos") or []):
+            if isinstance(ph, dict):
+                p = c.path(ph, "clip", f"{where}.photos[{j}]")
+                ph["clip"] = str(p) if p else None
+        # any graphic may carry a logo, not only an end card
+        if isinstance(g.get("logo"), dict):
+            p = c.path(g["logo"], "file", where + ".logo")
+            g["logo"]["file"] = str(p) if p else None
+        if gtype == "layout":
+            if g.get("in") is None or g.get("out") is None:
+                c.errors.append(f"{where}: a layout needs 'in' and 'out'")
+            panels = g.get("panels")
+            # One panel is a legitimate layout: a single framed band over the bed,
+            # which is how a 16:9 clip keeps a whole line of people inside a 9:16
+            # frame instead of being cropped to a third of them.
+            if not isinstance(panels, list) or len(panels) < 1:
+                c.errors.append(f"{where}: 'panels' must be a non-empty list")
+            else:
+                for j, pn in enumerate(panels):
+                    if not isinstance(pn, dict):
+                        c.errors.append(f"{where}.panels[{j}]: must be an object"); continue
+                    q = c.path(pn, "clip", f"{where}.panels[{j}]")
+                    pn["clip"] = str(q) if q else None
+                    for k in ("sw", "sh"):
+                        if not isinstance(pn.get(k), (int, float)) or pn.get(k, 0) <= 0:
+                            c.errors.append(f"{where}.panels[{j}]: '{k}' (source pixel size) is required")
+        if gtype == "inset":
+            if g.get("in") is None or g.get("out") is None:
+                c.errors.append(f"{where}: an inset needs 'in' and 'out'")
+            items = g.get("items")
+            if not isinstance(items, list) or not items:
+                c.errors.append(f"{where}: 'items' must be a non-empty list")
+            else:
+                for j, it in enumerate(items):
+                    if not isinstance(it, dict):
+                        c.errors.append(f"{where}.items[{j}]: must be an object")
+                        continue
+                    p = c.path(it, "clip", f"{where}.items[{j}]")
+                    it["clip"] = str(p) if p else None
         graphics.append(g)
 
     project = data.get("project")

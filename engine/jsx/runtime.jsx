@@ -87,9 +87,22 @@ var AES = (function () {
         return layer.property("ADBE Transform Group").property(TRANSFORM[key]);
     }
 
+    // "fx:<effect matchName>:<property index>" addresses an effect's own parameter,
+    // so a blur can resolve or a glow can breathe. Anything else is a transform.
+    function anyprop(layer, key) {
+        if (key.indexOf("fx:") !== 0) { return tprop(layer, key); }
+        var bits = key.split(":");
+        var parade = layer.property("ADBE Effect Parade");
+        var fx = parade.property(bits[1]);
+        if (!fx) { fx = parade.addProperty(bits[1]); }
+        // a parameter may be named or indexed; names survive AE version changes
+        var n = parseInt(bits[2], 10);
+        return isNaN(n) ? fx.property(bits[2]) : fx.property(n);
+    }
+
     function setExprs(layer, exprs) {
         if (!exprs) { return; }
-        for (var k in exprs) { if (exprs.hasOwnProperty(k)) { tprop(layer, k).expression = EASE + exprs[k]; } }
+        for (var k in exprs) { if (exprs.hasOwnProperty(k)) { anyprop(layer, k).expression = EASE + exprs[k]; } }
     }
 
     // Name, parent, static transform, expressions and in/out. Parenting first: AE compensates the child
@@ -102,6 +115,12 @@ var AES = (function () {
             tprop(layer, "scale").setValue([100, 100]);
             tprop(layer, "position").setValue([0, 0]);
         }
+        // Stills and footage are almost always scaled here, and AE defaults to
+        // BILINEAR sampling with quality inherited from the render template. For an
+        // enlarged photograph that is the difference between soft and sharp, so ask
+        // for BEST + BICUBIC explicitly rather than relying on the template.
+        try { layer.quality = LayerQuality.BEST; } catch (e) { /* not an AVLayer */ }
+        try { layer.samplingQuality = LayerSamplingQuality.BICUBIC; } catch (e) { /* older AE */ }
         if (o.anchor) { tprop(layer, "anchor").setValue(o.anchor); }
         if (o.position) { tprop(layer, "position").setValue(o.position); }
         if (o.scale) { tprop(layer, "scale").setValue(o.scale); }
@@ -132,11 +151,18 @@ var AES = (function () {
         }
     }
 
-    function mask(layer, item, size, scalePct) {
+    function mask(layer, item, size, scalePct, centre) {
+        // `centre` is a point in the SOURCE, normalised 0..1. Masking around the
+        // subject rather than the middle of the frame is what lets a photograph sit
+        // in a narrow panel without its subject being cropped away.
         var m = layer.property("ADBE Mask Parade").addProperty("ADBE Mask Atom");
         var shp = new Shape();
         var hw = size[0] / 2 / (scalePct / 100), hh = size[1] / 2 / (scalePct / 100);
-        var cx = item.width / 2, cy = item.height / 2;
+        var nx = centre ? centre[0] : 0.5, ny = centre ? centre[1] : 0.5;
+        var cx = item.width * nx, cy = item.height * ny;
+        // keep the window inside the source
+        if (cx - hw < 0) { cx = hw; } if (cx + hw > item.width) { cx = item.width - hw; }
+        if (cy - hh < 0) { cy = hh; } if (cy + hh > item.height) { cy = item.height - hh; }
         shp.vertices = [[cx - hw, cy - hh], [cx + hw, cy - hh], [cx + hw, cy + hh], [cx - hw, cy + hh]];
         shp.closed = true;
         m.property("ADBE Mask Shape").setValue(shp);
@@ -159,12 +185,29 @@ var AES = (function () {
             var sc = o.width ? 100 * o.width / item.width :
                 Math.max(ctx.comp.width / item.width, ctx.comp.height / item.height) * 100 * (o.zoom || 1);
             tprop(layer, "scale").setValue([sc, sc]);
-            if (o.mask) { mask(layer, item, o.mask, sc); }
+            if (o.mask) { mask(layer, item, o.mask, sc, o.mask_center); }
             if (o.lumetri) { lumetri(layer, o.lumetri); }
         }
+        if (o.remap) {
+            // Time remapping lets a clip run and then sit on a frame. Enabling it
+            // plants its own keys and moves the out point, so the expression is given
+            // sole control and the in/out are re-asserted afterwards.
+            layer.timeRemapEnabled = true;
+            var tr = layer.property("ADBE Time Remapping");
+            // Keep the keyframes AE plants when remapping is switched on: strip them
+            // all and the property becomes hidden, which refuses an expression. The
+            // expression overrides them anyway.
+            while (tr.numKeys > 1) { tr.removeKey(tr.numKeys); }
+            tr.expression = EASE + o.remap;
+            layer.inPoint = o.start;
+            layer.outPoint = end;
+        }
         if (item.hasAudio) {
-            layer.audioEnabled = !!audioOnly;
-            if (audioOnly) { levels(layer, o); }
+            // A video shot can carry its own sound, but only when the plan asks for
+            // it: left on by default every clip's audio would fight the music bed.
+            var wantAudio = audioOnly || o.gain_db !== undefined || !!o.levels;
+            layer.audioEnabled = wantAudio;
+            if (wantAudio) { levels(layer, o); }
         }
         return layer;
     }
@@ -270,7 +313,14 @@ var AES = (function () {
         image: function (o) {
             var layer = ctx.comp.layers.add(imp(o.file));
             place(layer, o);
-            if (o.width) {
+            if (o.cover) {
+                // Fill the frame whatever its shape. A gradient authored 16:9 and
+                // scaled to a 9:16 frame's WIDTH ends up a third of its height and
+                // reads as a dark band across the middle of the picture.
+                var cv = 100 * Math.max(ctx.comp.width / layer.source.width,
+                                        ctx.comp.height / layer.source.height);
+                tprop(layer, "scale").setValue([cv, cv]);
+            } else if (o.width) {
                 var sc = 100 * o.width / layer.source.width;
                 tprop(layer, "scale").setValue([sc, sc]);
             }

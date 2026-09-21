@@ -139,7 +139,10 @@ def text_block(ctx, *, prefix, parent, lines, times, x, y_first, gap, style, ali
 
 def highlighter(ctx, *, id, parent, target, size, t0, dur, color, opacity=None, pad=14, band=(0.5, 0.46), rough=True, t_in=None, t_out=None):
     geo = (f"var L=thisComp.layer({js(target)});var p=L.transform.position;var r=L.sourceRectAtTime({T_END},false);"
-           f"var x0=p[0]+r.left-{pad},w=r.width+{r3(2 * pad)},top=p[1]-{r3(size * band[0])},h={r3(size * band[1])};"
+           # band[0] may be negative - an underline sits BELOW the baseline - so the
+           # offset is added in parentheses rather than subtracted, or the expression
+           # emits "p[1]--12.3" and After Effects rejects it
+           f"var x0=p[0]+r.left-{pad},w=r.width+{r3(2 * pad)},top=p[1]+({r3(-size * band[0])}),h={r3(size * band[1])};"
            f"var k=eio((time-{r3(t0)})/{dur});")
     ctx.ops.add("rect", id=id, parent=parent, color=color, rect_expr={"size": geo + "[w*k,h]", "center": geo + "[x0+w*k/2,top+h/2]"},
                 expr={"opacity": opacity} if opacity else None, **span(t_in, t_out))
