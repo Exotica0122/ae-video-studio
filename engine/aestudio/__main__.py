@@ -5,6 +5,7 @@ import sys
 import time
 from pathlib import Path
 
+from .audiopost import AudioPostError, build as build_audio, merge_into
 from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
 from .components.layout import LayoutError
@@ -24,7 +25,7 @@ from .styleframe import render_mockups
 from .timing import TimingError
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, DoctorError, ProjectError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -267,6 +268,25 @@ def cmd_decide(a):
     return 0
 
 
+def cmd_audio_plan(a):
+    spec = json.loads(Path(a.spec).read_text(encoding="utf-8"))
+    root = a.root or Path(a.spec).parent
+    audio = build_audio(spec, root, start=a.start, target=a.target)
+    if a.merge:
+        plan_path = Path(a.merge)
+        merged = merge_into(json.loads(plan_path.read_text(encoding="utf-8")), audio)
+        plan_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        out = plan_path
+    else:
+        out = Path(a.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(audio, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({"out": str(out), "voices": len(audio["voices"]),
+                      "duration": audio["duration"],
+                      "gains": {v["id"]: v["gain_db"] for v in audio["voices"]}}, ensure_ascii=False))
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -363,6 +383,14 @@ def parser():
     dc2.add_argument("--what", required=True)
     dc2.add_argument("--detail")
     dc2.set_defaults(fn=cmd_decide)
+    ap = sub.add_parser("audio-plan")
+    ap.add_argument("spec", help="JSON with a 'takes' list, optional 'music' and 'duration'")
+    ap.add_argument("--out", default="plan/audio.json")
+    ap.add_argument("--merge", help="splice voices/music into this existing edit.json instead")
+    ap.add_argument("--root", help="resolve take files against this folder (default: the spec's folder)")
+    ap.add_argument("--start", type=float, default=0.0)
+    ap.add_argument("--target", type=float, default=-16.0)
+    ap.set_defaults(fn=cmd_audio_plan)
     return p
 
 
