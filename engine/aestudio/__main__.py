@@ -15,7 +15,7 @@ from .designgen import DesignGenError, Draft, propose, save_design, style_frame_
 from .footage import log_footage
 from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
-from .media import MediaError
+from .media import MediaError, probe
 from .ops import OpsError
 from .plan import PlanError, load_plan
 from .project import ProjectError, gates, init_project, next_gate, record_decision
@@ -23,9 +23,12 @@ from .preview import PreviewError, read_choice, serve, wait_for_choice
 from .render import RenderError, render
 from .styleframe import render_mockups
 from .timing import TimingError
+from .videoqa import (QAError, QAReport, decode_check, legibility, mix_loudness,
+                      music_before_voice, section_loudness, sfx_audible, share_copy,
+                      stills as qa_stills, stream_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -287,6 +290,50 @@ def cmd_audio_plan(a):
     return 0
 
 
+def _voice_spans(plan: dict) -> list:
+    """Where each voice actually speaks, preferring the span audio-post measured."""
+    out = []
+    for v in plan.get("voices") or []:
+        if isinstance(v.get("speech"), list) and len(v["speech"]) == 2:
+            out.append((float(v["speech"][0]), float(v["speech"][1])))
+        elif v.get("at") is not None:
+            out.append((float(v["at"]), float(v["at"]) + 2.0))
+    return sorted(out)
+
+
+def cmd_qa(a):
+    export = Path(a.export)
+    plan = json.loads(Path(a.plan).read_text(encoding="utf-8")) if a.plan else {}
+    report = QAReport(export=str(export))
+    report.findings.append(decode_check(export))
+    report.findings += stream_check(export)
+    report.findings += mix_loudness(export, target=a.target)
+    if a.sections:
+        report.findings += section_loudness(export, json.loads(Path(a.sections).read_text(encoding="utf-8")),
+                                            target=a.target)
+    spans = _voice_spans(plan)
+    if spans:
+        report.findings += music_before_voice(export, spans, probe(export).duration)
+    if plan.get("sfx"):
+        report.findings += sfx_audible(export, plan["sfx"])
+    if a.design:
+        report.findings += legibility(load_design(a.design))
+    extras = {}
+    qa_dir = Path(a.out)
+    if a.stills:
+        times = [float(t) for t in a.stills.split(",") if t.strip()]
+        made = qa_stills(export, times, qa_dir / "stills")
+        extras["Stills"] = ", ".join(f"`{p.name}`" for p in made)
+    if a.share:
+        copy = share_copy(export, Path(a.share))
+        extras["Share copy"] = f"`{copy}` ({copy.stat().st_size / 1e6:.1f} MB)"
+    out = write_report(qa_dir, report, extras)
+    print(json.dumps({"report": str(out), "failed": len(report.failures),
+                      "warnings": len(report.warnings), "checks": len(report.findings)},
+                     ensure_ascii=False))
+    return 1 if report.failures else 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -391,6 +438,16 @@ def parser():
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--target", type=float, default=-16.0)
     ap.set_defaults(fn=cmd_audio_plan)
+    qa = sub.add_parser("qa")
+    qa.add_argument("export")
+    qa.add_argument("--plan", help="plan/edit.json — gives voice onsets and SFX to check")
+    qa.add_argument("--design", help="plan/design.json — adds the contrast checks")
+    qa.add_argument("--sections", help="JSON list of {id,start,end} to measure separately")
+    qa.add_argument("--out", default="qa", help="folder for report-vNN.md (default: qa)")
+    qa.add_argument("--stills", help="comma-separated times to grab stills at")
+    qa.add_argument("--share", help="also write a 1080p share copy to this path")
+    qa.add_argument("--target", type=float, default=-16.0)
+    qa.set_defaults(fn=cmd_qa)
     return p
 
 
