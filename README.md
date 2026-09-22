@@ -34,6 +34,21 @@ The story, timing and text stay the same; typography, layout, colour and motion 
 
 ![The same three moments rendered in the notebook and cinematic-minimal designs](docs/media/two-designs.png)
 
+## Prerequisites
+
+This plugin drives After Effects through the
+[After Effects MCP](https://github.com/Dakkshin/after-effects-mcp) server, so that needs to
+be set up first. The plugin uses a `runJsx` command that the upstream server doesn't have, so build
+a patched copy with the bundled script instead of installing upstream directly:
+
+```bash
+bridge/install.sh     # clones Dakkshin/after-effects-mcp at a pinned commit, patches and builds it
+```
+
+Then, in After Effects, copy the bridge's ScriptUI panel into `Scripts/ScriptUI Panels/`,
+open **Window > mcp-bridge-auto.jsx** and tick **Auto-run**. The plugin registers the
+`after-effects` MCP server itself, so you don't need to add it to Claude Code by hand.
+
 ## Install
 
 In Claude Code:
@@ -48,7 +63,7 @@ Then check the requirements below with `aestudio doctor`.
 ## Requirements
 
 - After Effects 2025+ with the MCP Bridge Auto panel (Auto-run on)
-- after-effects-mcp with the `runJsx` command — build it with `bridge/install.sh`
+- [after-effects-mcp](https://github.com/Dakkshin/after-effects-mcp) with the `runJsx` command — see [Prerequisites](#prerequisites)
 - ffmpeg, Python 3.10+, mlx-whisper (optional, for word-timed captions)
 
 Check all of it at once, with the exact fix for anything missing:
