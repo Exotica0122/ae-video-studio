@@ -1,3 +1,4 @@
+import struct
 import unittest
 
 from aestudio.components import REGISTRY
@@ -47,6 +48,42 @@ class CinematicTest(unittest.TestCase):
         self.assertIn("eio((time-5.1)/0.6)", it["LOWER_THIRD_01_RULE"]["rect_expr"]["size"])
         self.assertEqual(it["LOWER_THIRD_01_NAME"]["reveal"]["by"], "chars")
         self.assertEqual(it["LOWER_THIRD_01_ROLE"]["tracking"], 120)
+
+    def test_caption_sits_on_a_scrim_under_its_text(self):
+        ctx, it = run({"type": "caption", "voice": "N1", "lines": LINES}, "line-fade")
+        scrim = it["CAPTION_01_SCRIM"]
+        self.assertTrue(scrim["file"].endswith("scrim-bottom.png"))
+        self.assertIn('layer("CAPTION_01")', scrim["expr"]["opacity"])
+        order = [o.get("id") for o in ctx.ops.items]
+        first_text = next(o["id"] for o in ctx.ops.items if o["op"] == "text")
+        self.assertLess(order.index("CAPTION_01_SCRIM"), order.index(first_text))
+
+    def test_scrim_follows_the_caption_placement(self):
+        for place, asset in (("top-left", "scrim-top.png"), ("center", "scrim-center.png"), ("bottom-right", "scrim-bottom.png")):
+            _, it = run({"type": "quote", "voice": "N1", "lines": LINES, "place": place}, "line-fade")
+            self.assertTrue(it["QUOTE_01_SCRIM"]["file"].endswith(asset), place)
+
+    def test_lower_third_scrim_fades_in_with_the_name(self):
+        _, it = run({"type": "lower-third", "at": 5, "name": "이하늘", "role": "스튜디오 참가자"}, "rule-wipe")
+        scrim = it["LOWER_THIRD_01_SCRIM"]
+        self.assertTrue(scrim["file"].endswith("scrim-bottom.png"))
+        self.assertIn("so((time-5.0)/0.5)", scrim["expr"]["opacity"])
+
+    def test_a_later_scrim_sits_under_earlier_graphics_text(self):
+        ctx = make_ctx("cinematic-minimal", voices={"N1": voice("N1", 10.0, WORDS)})
+        REGISTRY[("lower-third", "rule-wipe")](ctx, {"type": "lower-third", "at": 9, "name": "이하늘", "role": "참가자"}, {})
+        REGISTRY[("quote", "line-fade")](ctx, {"type": "quote", "voice": "N1", "lines": LINES}, {})
+        validate_ops(ctx.ops.items)
+        order = {o["layer"]: o["below"] for o in ctx.ops.items if o["op"] == "order"}
+        self.assertEqual(order["QUOTE_01_SCRIM"], ["LOWER_THIRD_01"])
+        self.assertEqual(order["LOWER_THIRD_01_SCRIM"], ["LOWER_THIRD_01"])
+
+    def test_scrim_assets_ship_as_16_9_pngs_with_alpha(self):
+        folder = load_design("cinematic-minimal").path.parent
+        for name in ("scrim-bottom.png", "scrim-top.png", "scrim-center.png"):
+            head = (folder / name).read_bytes()[:26]
+            width, height, _, colour_type = struct.unpack(">IIBB", head[16:26])
+            self.assertEqual((width * 9, colour_type), (height * 16, 6), name)
 
     def test_title_black_frame(self):
         _, it = run({"type": "title-page", "in": 0, "out": 6, "lines": [["함께 배우고,"]], "ref": "OPEN DAY"}, "black-frame")

@@ -11,6 +11,7 @@ class Context:
     duration: float
     voices: dict
     grade: dict = field(default_factory=dict)
+    graphics_from: int = 0          # index of the first op a graphic added; shots come before it
 
     @property
     def s(self) -> float:

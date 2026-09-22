@@ -1,8 +1,10 @@
-"""Cinematic Minimal treatments: centred lines that fade up, accent-colour emphasis, rule-wipe lower third,
+"""Cinematic Minimal treatments: centred lines that fade up over a soft scrim, accent-colour emphasis, rule-wipe lower third,
 black-frame title and a centred end card over blurred footage."""
 from ..util import r3
 from . import register
-from .layout import fade_ref, parse_line, place_block, schedule_times, segment_times, span, text_block
+from .layout import fade_ref, parse_line, place_block, schedule_times, scrim, segment_times, span, text_block, vertical
+
+SCRIMS = {"top": "scrim-top.png", "center": "scrim-center.png", "bottom": "scrim-bottom.png"}
 
 
 def _shadow(ctx, layer_id):
@@ -24,10 +26,13 @@ def caption_line_fade(ctx, g, opts):
         raw[-1] = raw[-1] + ["”"]
     lines = [parse_line(line, ctx.size(base, 0.3)) for line in raw]
     gap = r3(ctx.size(base) * 1.45)
-    x, y0, align = place_block(g.get("place", "lower-center"), len(lines), gap, ctx.width, ctx.height)
+    place = g.get("place", "lower-center")
+    x, y0, align = place_block(place, len(lines), gap, ctx.width, ctx.height)
     cid = ops.uid("QUOTE" if quote else "CAPTION")
     ops.add("group", id=cid, fade=f"100*so((time-{t_in})/0.5)*(1-so((time-{r3(t_out - 0.5)})/0.5))",
             expr={"position": f"value+[0,{ctx.px(24)}*(1-so((time-{t_in})/0.8))]"})
+    scrim(ctx, id=f"{cid}_SCRIM", parent=cid, asset=SCRIMS[vertical(place)], strength=100,
+          opacity=fade_ref(cid), under_graphics=True, **span(t_in, r3(t_out + 0.1)))
 
     def style(i, seg):
         return {"font": d.font("emphasis" if seg.hl and not quote else base), "size": ctx.size(base),
@@ -51,6 +56,8 @@ def lower_third_rule_wipe(ctx, g, opts):
     sp = span(t_in, t_out + 0.05)
     ops.add("group", id=lid, fade=f"100*(1-so((time-{r3(t_out - 0.6)})/0.6))")
     fade = fade_ref(lid)
+    scrim(ctx, id=f"{lid}_SCRIM", parent=lid, asset=SCRIMS["bottom"], strength=100,
+          opacity=f"{fade}*so((time-{t_in})/0.5)", under_graphics=True, **sp)
     name_size = ctx.size("headline", 0.62)
     rule_w, rule_h, rule_y = px(360), px(4), r3(y - name_size - px(40))
     k = f"var k=eio((time-{r3(t_in + 0.1)})/0.6);"
