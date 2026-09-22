@@ -65,6 +65,10 @@ single-colour logo to the design's ink colour; use `false` for multi-colour logo
 | title-page | `notebook-page` | `black-frame` |
 | end-card | `notebook-page` | `centered-stack` |
 
+`line-fade` and `rule-wipe` fade a soft dark scrim in behind the type (`scrim-bottom`, `-top` or
+`-center.png` beside the design, chosen by `place`), so pale type stays legible on light footage.
+Scrims sit beneath every graphic layer, so one graphic's scrim never dims another's type.
+
 ### editorial
 
 A third family, `editorial`, sets type directly on full-bleed footage with a vertical gradient

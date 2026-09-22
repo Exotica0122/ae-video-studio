@@ -88,7 +88,8 @@ def compile_plan(plan, design) -> list:
                 width=r3(f.width * s.zoom) if s.fit == "width" else None,
                 levels=levels, expr=expr or None)
 
-    ctx = Context(design, ops, f.width, f.height, f.duration, voices, {"lumetri": base_grade})
+    ctx = Context(design, ops, f.width, f.height, f.duration, voices, {"lumetri": base_grade},
+                  graphics_from=len(ops.items))
     for g in plan.graphics:
         treatment, options = design.treatment(g["type"])
         builder = REGISTRY.get((g["type"], treatment))

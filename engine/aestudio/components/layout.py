@@ -88,15 +88,39 @@ def schedule_times(lines, start, step, line_pause):
     return out
 
 
+def vertical(place) -> str:
+    """"top", "center" or "bottom": which band of the frame a place sits in."""
+    return "center" if place == "center" else ("top" if place.startswith("top") else "bottom")
+
+
 def place_block(place, n_lines, gap, width, height):
     if place not in PLACES:
         raise LayoutError(f"unknown place '{place}' (expected one of {', '.join(PLACES)})")
     extent = (n_lines - 1) * gap
     horiz = "center" if place.endswith("center") else place.split("-")[1]
-    vert = "center" if place == "center" else ("top" if place.startswith("top") else "bottom")
+    vert = vertical(place)
     x = {"left": 0.09, "right": 0.55, "center": 0.5}[horiz] * width
     y_first = {"top": 0.17 * height, "bottom": 0.85 * height - extent, "center": 0.5 * height - extent / 2}[vert]
     return round(x, 2), round(y_first, 2), ("center" if horiz == "center" else "left")
+
+
+LAYER_OPS = ("footage", "group", "rect", "text", "image", "solid", "rules")
+
+
+def scrim(ctx, *, id, parent, asset, strength, opacity=None, under_graphics=False, **sp):
+    """A darkening alpha-gradient PNG shipped beside the design.json, scaled to cover the frame.
+
+    A PNG, not ADBE Ramp: Gradient Ramp ignores alpha and veils the whole frame.
+    `under_graphics` drops it beneath every graphic layer, so it never dims another graphic's type.
+    """
+    op_expr = f"({opacity})*{strength}/100" if opacity else str(r3(strength))
+    ctx.ops.add("image", id=id, parent=parent, file=str(ctx.design.path.parent / asset),
+                cover=True, position=[r3(ctx.width / 2), r3(ctx.height / 2)],
+                expr={"opacity": op_expr}, **sp)
+    if under_graphics:
+        first = next(o["id"] for o in ctx.ops.items[ctx.graphics_from:] if o["op"] in LAYER_OPS)
+        if first != id:
+            ctx.ops.add("order", layer=id, below=[first])
 
 
 def fade_ref(group_id, mult=100):

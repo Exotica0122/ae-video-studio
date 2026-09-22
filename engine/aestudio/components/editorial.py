@@ -10,7 +10,7 @@ a design using these treatments wants a pale `ink`, not a paper-dark one.
 """
 from ..util import r3
 from . import register
-from .layout import LayoutError, fade_ref, parse_line, schedule_times, span, text_block
+from .layout import LayoutError, fade_ref, parse_line, schedule_times, scrim, span, text_block
 
 # alpha-gradient assets that ship beside the design.json
 SCRIM_TITLE = "scrim-title.png"
@@ -19,25 +19,6 @@ SCRIM_CAPTION = "scrim-caption.png"
 # How long a layout's bed and panels take to rise. They share one curve so the
 # bed can never be more opaque than the panels sitting on it.
 RAMP_IN = 0.35
-
-
-def _scrim(ctx, *, id, parent, asset, strength, opacity=None, **sp):
-    """A bottom-up darkening gradient. Keeps the photo readable under the type.
-
-    `sp` is a span() dict, so it carries "in"/"out" keys straight through to the op.
-
-    This is a PNG carrying a real alpha channel, not an ADBE Ramp effect: Gradient
-    Ramp paints RGB across an opaque solid and ignores the alpha in its colours, so
-    it veils the whole frame instead of fading in toward the bottom. Strength rides
-    on the layer's own opacity - there is no "ADBE Opacity" effect to apply.
-    """
-    ops, W, H = ctx.ops, ctx.width, ctx.height
-    op_expr = f"({opacity})*{strength}/100" if opacity else str(r3(strength))
-    # cover, never fit-to-width: the gradient must reach the top and bottom of the
-    # frame in any aspect, and it is uniform horizontally so overflow costs nothing
-    ops.add("image", id=id, parent=parent, file=str(ctx.design.path.parent / asset),
-            cover=True, position=[r3(W / 2), r3(H / 2)],
-            expr={"opacity": op_expr}, **sp)
 
 
 def _photo_grade(ctx, photo):
@@ -83,7 +64,7 @@ def title_editorial(ctx, g, opts):
                 src_in=photo.get("src_in", 0), zoom=photo.get("zoom", 1.04),
                 position=[r3(W / 2), r3(H / 2)],
                 lumetri=_photo_grade(ctx, photo), expr={"opacity": fade})
-    _scrim(ctx, id=f"{tid}_SCRIM", parent=tid, asset=SCRIM_TITLE, strength=92,
+    scrim(ctx, id=f"{tid}_SCRIM", parent=tid, asset=SCRIM_TITLE, strength=92,
            opacity=fade, **sp)
 
     x = r3(px(150))
@@ -141,7 +122,7 @@ def caption_editorial(ctx, g, opts):
             fade=f"100*so((time-{t_in})/0.5)*(1-so((time-{r3(t_out - 0.5)})/0.5))")
     fade = fade_ref(cid)
     sp = span(t_in, r3(t_out + 0.1))
-    _scrim(ctx, id=f"{cid}_SCRIM", parent=cid, asset=SCRIM_CAPTION, strength=96,
+    scrim(ctx, id=f"{cid}_SCRIM", parent=cid, asset=SCRIM_CAPTION, strength=96,
            opacity=fade, **sp)
 
     x = r3(px(150))
@@ -423,7 +404,7 @@ def opening_editorial(ctx, g, opts):
     ops.add("rect", id=f"{oid}_VEIL", parent=oid, color=d.color("shade"),
             size=[r3(W + px(20)), r3(H + px(20))], center=[r3(W / 2), r3(H / 2)],
             expr={"opacity": f"(68-44*eio((time-{r3(t_in + 0.5)})/1.9))*{fade}/100"}, **sp)
-    _scrim(ctx, id=f"{oid}_SCRIM", parent=oid, asset=SCRIM_TITLE, strength=64, opacity=fade, **sp)
+    scrim(ctx, id=f"{oid}_SCRIM", parent=oid, asset=SCRIM_TITLE, strength=64, opacity=fade, **sp)
 
     # ---- route strip: ICN ---o--- WLG -------------------------------------
     y_r = Y(0.104)
@@ -550,7 +531,7 @@ def opening_aperture(ctx, g, opts):
     ops.add("rect", id=f"{oid}_VEIL", parent=oid, color=d.color("shade"),
             size=[r3(W + px(20)), r3(H + px(20))], center=[r3(W / 2), r3(H / 2)],
             expr={"opacity": f"(52-30*eio((time-{r3(t_in + 0.8)})/1.6))*{fade}/100"}, **sp)
-    _scrim(ctx, id=f"{oid}_SCRIM", parent=oid, asset=SCRIM_TITLE, strength=70, opacity=fade, **sp)
+    scrim(ctx, id=f"{oid}_SCRIM", parent=oid, asset=SCRIM_TITLE, strength=70, opacity=fade, **sp)
 
     # the aperture: half-height grows from a slit to the whole frame
     o0, od = r3(t_in + 0.12), 1.15
@@ -620,7 +601,7 @@ def opening_impact(ctx, g, opts):
     ops.add("rect", id=f"{oid}_VEIL", parent=oid, color=d.color("shade"),
             size=[r3(W + px(20)), r3(H + px(20))], center=[r3(W / 2), r3(H / 2)],
             expr={"opacity": f"(60-36*eio((time-{r3(t_in + 0.4)})/1.5))*{fade}/100"}, **sp)
-    _scrim(ctx, id=f"{oid}_SCRIM", parent=oid, asset=SCRIM_TITLE, strength=76, opacity=fade, **sp)
+    scrim(ctx, id=f"{oid}_SCRIM", parent=oid, asset=SCRIM_TITLE, strength=76, opacity=fade, **sp)
 
     mult = float(g.get("size", 1.16))
     size = ctx.size("headline", mult)
