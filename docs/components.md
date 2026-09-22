@@ -65,5 +65,17 @@ single-colour logo to the design's ink colour; use `false` for multi-colour logo
 | title-page | `notebook-page` | `black-frame` |
 | end-card | `notebook-page` | `centered-stack` |
 
+### editorial
+
+A third family, `editorial`, sets type directly on full-bleed footage with a vertical gradient
+scrim darkening only the band the type sits on. It covers `title-page`, `caption`, `quote` and
+`end-card`, plus `opening`, `inset` and `layout`. Two things to know before choosing it:
+
+- There is **no editorial `lower-third`**, so a design using editorial must take its lower third
+  from another family (`rule-wipe` or `paper-tab`).
+- The editorial `end-card` is a **closing statement built from `lines`**, not the info card with
+  `title`/`year`/`tagline`/`rows`. Feeding it an info end card raises an error naming a treatment
+  that does render rows.
+
 A new treatment is a function registered with `@register(component, treatment)` in
 `engine/aestudio/components/`, built only from ops and the helpers in `layout.py`.

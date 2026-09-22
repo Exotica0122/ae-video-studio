@@ -10,7 +10,7 @@ a design using these treatments wants a pale `ink`, not a paper-dark one.
 """
 from ..util import r3
 from . import register
-from .layout import fade_ref, parse_line, schedule_times, span, text_block
+from .layout import LayoutError, fade_ref, parse_line, schedule_times, span, text_block
 
 # alpha-gradient assets that ship beside the design.json
 SCRIM_TITLE = "scrim-title.png"
@@ -190,6 +190,14 @@ def end_card_editorial(ctx, g, opts):
 
     e_mult = float(g.get("size", 0.55))
     size = ctx.size("scripture", e_mult)
+    if "lines" not in g:
+        # This treatment is a closing statement, not the info card that `notebook-page` and
+        # `centered-stack` build from title/year/rows. Say so, rather than KeyError-ing on a
+        # perfectly valid end-card graphic.
+        raise LayoutError(
+            "the 'editorial' end-card is a closing statement and needs 'lines'; a title/year/"
+            "tagline/rows end card needs a treatment that renders info rows, such as "
+            "'notebook-page' or 'centered-stack'")
     lines = [parse_line(line, ctx.size("scripture", e_mult * 0.33)) for line in g["lines"]]
     gap = r3(size * 1.42)
     y_first = r3(0.38 * H)
