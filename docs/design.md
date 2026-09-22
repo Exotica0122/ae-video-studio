@@ -244,9 +244,13 @@ Grade
 3. **`ae-build-render` core** — `edit.json` + design recipe → JSX for shots, voices, music, SFX, graphics.
 4. **Two contrasting designs at once** — `notebook` and a deliberately different one
    (e.g. `cinematic-minimal`), so nothing paper-specific leaks into the engine.
-5. **Parity test (local only)** — rebuild the first production from an `edit.json` kept with
-   that project (outside the repo); compare stills and per-section loudness with its approved
-   render. Then re-render the same edit with the second design, changing only `design`.
+5. **Parity test (local only)** *(done)* — the 60s production was rebuilt from an `edit.json`
+   reconstructed from its generator's EDL and kept with that project, outside the repo
+   (`project-files/parity/`). 18 shots, 7 voices, 13 graphics, 96 layers, no expression
+   errors. `duck_keys` reproduces the generator's music ducking exactly: 24 keyframes, same
+   times, same levels. Stills match in layout, palette, typography and highlight treatment;
+   they differ where the reconstruction is thinner than the original — per-shot Lumetri grades
+   and caption emphasis are not carried in the EDL, so the rebuild is ungraded and unemphasised.
    Add a small fictional example under `examples/` for anyone else to test with.
 6. **`audio-post`** and **`video-qa`** scripts (ducking, placement, loudness, legibility checks). *(done)*
 7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) *(done)*.
@@ -262,11 +266,11 @@ Step 9 shipped next: `video-director` (project layout, gate tracking, decision l
 `studio-doctor` (environment, bridge and font checks). Then `audio-post`, `video-qa` and
 `color-grade` completed steps 6–7, so every skill in §4 now exists.
 
-What remains is not new skills but proof and packaging: the step-5 parity test (rebuild the
-first production from an edit.json and compare stills and per-section loudness against its
-approved master), the open questions in §10, and the field work on the `field-work` branch
-(a third treatment family, an NFC path fix and photo-on-any-graphic, written while using the
-engine on a second production — 1,370 lines with no tests yet).
+The parity test has since been run and the field work merged with tests, so what remains is
+the open questions in §10 and two findings from the parity run: a graphic can silently sit on
+top of another (the quote card hid the lower third with no warning — `video-qa` should flag
+overlapping placements), and an `edit.json` has no way to carry per-shot grade values, which
+`plan/grade.json` will need to feed the builder.
 
 `studio-doctor` reads only files by default; `--ping` is the one opt-in that touches After
 Effects, because the bridge runs one job at a time and a diagnostic must never stall a render.
