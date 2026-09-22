@@ -1,5 +1,6 @@
 """Font catalogue: what is installed, which pairings suit a mood, and licences to pass on."""
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -75,9 +76,15 @@ def load_catalogue(path=CATALOGUE) -> list:
     return catalogue
 
 
-def installed_files(dirs=FONT_DIRS) -> set:
+def font_dirs() -> tuple:
+    """FONT_DIRS, or the os.pathsep-separated folders in AESTUDIO_FONT_DIRS."""
+    override = os.environ.get("AESTUDIO_FONT_DIRS")
+    return tuple(Path(d).expanduser() for d in override.split(os.pathsep) if d) if override else FONT_DIRS
+
+
+def installed_files(dirs=None) -> set:
     stems = set()
-    for directory in dirs:
+    for directory in font_dirs() if dirs is None else dirs:
         try:
             for f in Path(directory).iterdir():
                 if f.is_file() and f.suffix.lower() in (".ttf", ".otf", ".ttc"):
@@ -87,7 +94,7 @@ def installed_files(dirs=FONT_DIRS) -> set:
     return stems
 
 
-def is_installed(font: Font, files=None, dirs=FONT_DIRS) -> bool:
+def is_installed(font: Font, files=None, dirs=None) -> bool:
     files = installed_files(dirs) if files is None else files
     stems = font.files if font.files else list(font.postscript.values())
     return bool(stems) and all(stem.lower() in files for stem in stems)
@@ -97,7 +104,7 @@ def _score(font: Font, moods) -> int:
     return len(set(m.lower() for m in moods) & set(m.lower() for m in font.moods))
 
 
-def pairings(moods, scripts=("ko",), catalogue=None, installed_only=True, dirs=FONT_DIRS) -> list:
+def pairings(moods, scripts=("ko",), catalogue=None, installed_only=True, dirs=None) -> list:
     catalogue = catalogue or load_catalogue()
     files = installed_files(dirs)
     usable = [f for f in catalogue if set(scripts) <= set(f.scripts)]

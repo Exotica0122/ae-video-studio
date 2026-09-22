@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Engine (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+
+      - name: Generate demo media
+        run: python examples/demo/make_media.py
+
+      - name: Unit tests
+        working-directory: engine
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Validate demo edit plan
+        working-directory: engine
+        run: |
+          python -m aestudio validate ../examples/demo/edit.json --design notebook
+          python -m aestudio validate ../examples/demo/edit.json --design cinematic-minimal

@@ -98,7 +98,7 @@ def _recipe(arch, pairing, accent) -> dict:
 
 
 def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archetypes=None, limit=3,
-            catalogue=None, dirs=fontlib.FONT_DIRS, pairings=2) -> list:
+            catalogue=None, dirs=None, pairings=2) -> list:
     """Compose design drafts: `limit` directions, each offered with up to `pairings` typefaces.
 
     A font-layer failure is reported as a design failure: callers of this module catch
