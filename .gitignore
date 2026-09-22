@@ -16,3 +16,6 @@ examples/demo/build/
 
 # README demo media is the exception
 !docs/media/*.mp4
+
+# agent planning notes stay local
+docs/superpowers/
