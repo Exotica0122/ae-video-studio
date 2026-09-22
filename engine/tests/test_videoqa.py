@@ -138,5 +138,75 @@ class MeasurementTest(unittest.TestCase):
             self.assertIn("no bed-only window", findings[0].detail)
 
 
+
+class SfxBaselineTest(unittest.TestCase):
+    """Found on a real master: the end-card sounds land 30ms after the last word."""
+
+    def test_a_clear_window_is_found_before_the_event(self):
+        window = qa._clear_window(10.0, 0.3, spans=[(2.0, 5.0)])
+        self.assertEqual(window, (9.7, 10.0), "nothing is in the way; use the moment before")
+
+    def test_a_short_voice_just_before_the_event_pushes_the_baseline_earlier(self):
+        window = qa._clear_window(10.0, 0.3, spans=[(9.5, 9.95)])
+        self.assertIsNotNone(window)
+        self.assertLessEqual(window[1], 9.4, "the baseline must clear the voice and its guard")
+
+    def test_a_voice_covering_the_whole_search_range_leaves_nowhere_to_measure(self):
+        self.assertIsNone(qa._clear_window(10.0, 0.3, spans=[(5.0, 9.95)]),
+                          "3s of continuous speech before the event means no baseline exists")
+
+    def test_no_clear_window_at_all_returns_none(self):
+        self.assertIsNone(qa._clear_window(10.0, 0.3, spans=[(0.0, 10.0)]))
+
+    def test_the_search_gives_up_rather_than_wandering_off(self):
+        self.assertIsNone(qa._clear_window(10.0, 0.3, spans=[(6.0, 10.0)], search=1.0))
+
+
+@unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
+class SfxMeasurementTest(unittest.TestCase):
+    def _mix(self, path):
+        """A quiet bed with a loud blip at 5.0s."""
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+                        "-i", "sine=frequency=110:duration=8",
+                        "-af", "volume='if(between(t,5.0,5.3),1.0,0.05)':eval=frame",
+                        "-c:a", "pcm_s16le", str(path)], check=True)
+
+    def test_an_audible_sfx_is_reported_with_its_lift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mix.wav"
+            self._mix(src)
+            finding = qa.sfx_audible(src, [{"at": 5.0, "role": "blip"}], spans=[])[0]
+            self.assertEqual(finding.status, "ok")
+            self.assertIn("lifts the mix", finding.detail)
+
+    def test_a_voice_running_into_the_event_makes_it_unmeasurable_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mix.wav"
+            self._mix(src)
+            finding = qa.sfx_audible(src, [{"at": 5.0, "role": "blip"}], spans=[(0.0, 5.0)])[0]
+            self.assertEqual(finding.status, "ok", "an unmeasurable sound is not a defect")
+            self.assertIn("not measurable", finding.detail)
+            self.assertIn("Listen", finding.detail)
+
+    def test_another_sfx_just_before_pushes_the_baseline_clear_of_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mix.wav"
+            self._mix(src)
+            events = [{"at": 4.8, "role": "first"}, {"at": 5.0, "role": "second"}]
+            by_name = {f.check: f for f in qa.sfx_audible(src, events, spans=[])}
+            self.assertIn("earlier", by_name["sfx:second"].detail,
+                          "the baseline must skip back past the other sound, and say that it did")
+
+    def test_speech_and_another_sfx_together_leave_nothing_to_measure(self):
+        """The real end card: three sounds inside two seconds, 30ms after the last word."""
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "mix.wav"
+            self._mix(src)
+            events = [{"at": 4.6, "role": "first"}, {"at": 5.0, "role": "second"}]
+            by_name = {f.check: f for f in qa.sfx_audible(src, events, spans=[(0.0, 4.55)])}
+            self.assertIn("not measurable", by_name["sfx:second"].detail)
+            self.assertEqual(by_name["sfx:second"].status, "ok", "unmeasurable is not a defect")
+
+
 if __name__ == "__main__":
     unittest.main()

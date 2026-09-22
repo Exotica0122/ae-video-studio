@@ -4,8 +4,10 @@ Everything here measures the file that was actually produced. A QA pass that rea
 the edit plan instead of the export cannot catch the failures worth catching: a comp that
 rendered black, music that swallows the first word, an SFX nobody can hear.
 """
+import contextlib
 import json
 import re
+import tempfile
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -182,6 +184,23 @@ def reference_bed(path, spans: list, duration: float, window: float = PRE_VOICE_
     return best
 
 
+@contextlib.contextmanager
+def decoded_audio(path, rate: int = 16000):
+    """Decode the soundtrack once to a small mono wav.
+
+    Every window is cut with atrim, which decodes from the start of the file each time. That is
+    right but quadratic: measuring a 60s 4K master window by window meant decoding ~900MB over
+    a hundred times. Measuring the same windows on a 2MB wav is the same arithmetic in
+    milliseconds.
+    """
+    path = Path(path)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "audio.wav"
+        _ffmpeg(["-v", "error", "-y", "-i", str(path), "-vn", "-ac", "1", "-ar", str(rate),
+                 "-c:a", "pcm_s16le", str(out)], f"decoding the audio of {path.name}")
+        yield out
+
+
 def music_before_voice(path, spans: list, duration: float, window: float = PRE_VOICE_WINDOW,
                        min_drop: float = MUSIC_HEADROOM_DB) -> list:
     """Music must already be down before a voice begins, not duck as it begins.
@@ -192,6 +211,11 @@ def music_before_voice(path, spans: list, duration: float, window: float = PRE_V
     spans = [(float(a), float(b)) for a, b in spans]
     if not spans:
         return []
+    with decoded_audio(path) as audio:
+        return _music_before_voice(audio, spans, duration, window, min_drop)
+
+
+def _music_before_voice(path, spans, duration, window, min_drop) -> list:
     full = reference_bed(path, spans, duration, window=window)
     if full is None:
         return [Finding("music-before-voice", "ok", "voices run throughout; no bed-only window to compare")]
@@ -212,20 +236,54 @@ def music_before_voice(path, spans: list, duration: float, window: float = PRE_V
     return findings
 
 
-def sfx_audible(path, events: list, floor: float = 3.0) -> list:
-    """An SFX nobody can hear is a note in the edit plan, not a sound in the video."""
+def _clear_window(at: float, length: float, spans: list, search: float = 3.0, step: float = 0.1):
+    """The nearest window of `length` ending by `at` that no voice runs through."""
+    blocked = [(a - 0.1, b + 0.1) for a, b in spans]
+    end = at
+    while end - length >= max(0.0, at - search):
+        start = end - length
+        if not any(s < end and start < e for s, e in blocked):
+            return start, end
+        end = round(end - step, 3)
+    return None
+
+
+def sfx_audible(path, events: list, spans: list = None, floor: float = 3.0) -> list:
+    """An SFX nobody can hear is a note in the edit plan, not a sound in the video.
+
+    The baseline must be a stretch with no voice in it. On a real master the end-card sounds
+    landed 30ms after the last word, so measuring "just before" measured the voice tail and
+    reported a negative lift — the sounds looked inaudible when the comparison was simply wrong.
+    """
+    with decoded_audio(path) as audio:
+        return _sfx_audible(audio, events, list(spans or []), floor)
+
+
+def _sfx_audible(path, events, spans, floor) -> list:
     findings = []
     for event in events:
         at = float(event["at"])
         name = event.get("role") or Path(event.get("file", "sfx")).stem
         if at < 0.4:
             continue
-        before = rms_db(path, max(0.0, at - 0.35), at - 0.05)
+        # other SFX block the baseline too: on an end card three sounds land inside two
+        # seconds, and measuring one against another says nothing about either
+        others = [(float(e["at"]), float(e["at"]) + 0.4) for e in events if e is not event]
+        window = _clear_window(at, 0.3, spans + others)
+        if window is None:
+            findings.append(Finding(f"sfx:{name}", "ok",
+                                    f"at {at:.2f}s — not measurable from the mix: speech or another "
+                                    f"sound runs up to it, so there is no clear moment to compare "
+                                    f"against. Listen to this one."))
+            continue
+        before = rms_db(path, *window)
         during = rms_db(path, at, at + 0.35)
         lift = during - before
         status = "ok" if lift >= floor else "warn"
+        gap = at - window[1]
+        where = "" if gap < 0.05 else f" (baseline {gap:.2f}s earlier, clear of speech)"
         findings.append(Finding(f"sfx:{name}", status,
-                                f"at {at:.2f}s lifts the mix {lift:+.1f} dB"
+                                f"at {at:.2f}s lifts the mix {lift:+.1f} dB{where}"
                                 + ("" if status == "ok" else " — probably inaudible in the mix")))
     return findings
 

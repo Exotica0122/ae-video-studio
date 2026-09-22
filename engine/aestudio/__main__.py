@@ -331,7 +331,7 @@ def cmd_qa(a):
     if spans:
         report.findings += music_before_voice(export, spans, probe(export).duration)
     if plan.get("sfx"):
-        report.findings += sfx_audible(export, plan["sfx"])
+        report.findings += sfx_audible(export, plan["sfx"], spans=spans)
     if a.design:
         report.findings += legibility(load_design(a.design))
     extras = {}
