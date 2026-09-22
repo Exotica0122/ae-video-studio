@@ -91,3 +91,7 @@ designs/          saved design recipes (notebook, cinematic-minimal, …); new o
 bridge/           runJsx patch for after-effects-mcp + install.sh to build it
 examples/         fictional sample assets (e.g. sample-logo-white.png)
 ```
+
+## License
+
+[MIT](LICENSE)
