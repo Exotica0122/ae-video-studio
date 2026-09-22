@@ -3,5 +3,6 @@
   "version": "0.2.0",
   "description": "Brief-to-4K motion-designed videos built and rendered in After Effects, with preview-and-approve gates at every creative step.",
   "author": { "name": "Exotica0122" },
+  "license": "MIT",
   "keywords": ["after-effects", "video", "motion-graphics", "audio", "color-grade"]
 }
