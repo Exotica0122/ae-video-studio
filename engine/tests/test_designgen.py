@@ -105,5 +105,46 @@ class DesignGenTest(unittest.TestCase):
         self.assertEqual(drafts[0].recipe["tokens"]["palette"]["accent"][:1], "#")
 
 
+
+class StyleFrameDurationTest(unittest.TestCase):
+    """A style frame must never end on black just because the footage is short."""
+
+    def _draft(self):
+        return designgen.propose(["warm"], log=None)[0]
+
+    def _log(self, durations, root="/nowhere"):
+        return {"root": root,
+                "clips": [{"name": f"c{i}.MP4", "path": f"{root}/c{i}.MP4", "luma": 0.5,
+                           "duration": d, "frames": []} for i, d in enumerate(durations)]}
+
+    def test_short_clips_shrink_the_comp_instead_of_leaving_black(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = designgen.style_frame_plan(self._draft(), self._log([2.2, 2.0]), tmp, duration=6.0)
+            plan = json.loads(Path(path).read_text(encoding="utf-8"))
+            covered = max(s["out"] for s in plan["shots"])
+            self.assertAlmostEqual(plan["format"]["duration"], covered, places=2,
+                                   msg="the comp outlasts its footage")
+
+    def test_long_clips_keep_the_requested_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = designgen.style_frame_plan(self._draft(), self._log([30.0, 30.0]), tmp, duration=6.0)
+            plan = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.assertEqual(plan["format"]["duration"], 6.0)
+
+    def test_footage_too_short_to_style_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(designgen.DesignGenError) as caught:
+                designgen.style_frame_plan(self._draft(), self._log([0.4]), tmp, duration=6.0)
+            self.assertIn("too short", str(caught.exception))
+
+    def test_the_end_card_still_fits_inside_the_shortened_comp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = designgen.style_frame_plan(self._draft(), self._log([2.4, 2.4]), tmp, duration=6.0)
+            plan = json.loads(Path(path).read_text(encoding="utf-8"))
+            end_card = [g for g in plan["graphics"] if g["type"] == "end-card"][0]
+            self.assertLess(end_card["in"], plan["format"]["duration"],
+                            "the end card starts after the comp has ended")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -99,7 +99,7 @@ def contact_sheet(frames: list, out, cols: int = 4, tile_width: int = 480) -> Pa
              if len(frames) > 1 else f"{scaled}[t0]copy[v]",
              "-map", "[v]", "-frames:v", 1, "-q:v", 3, out]
     run(args, "building a contact sheet")
-    if rows and not out.exists():
+    if not out.exists():
         raise MediaError(f"no contact sheet written to {out}")
     return out
 
@@ -126,6 +126,8 @@ def _raw(src, at: float, size: str, pix_fmt: str, what: str) -> bytes:
 
 def mean_luma(src, at: float) -> float:
     data = _raw(src, at, "1:1", "gray", f"reading brightness of {Path(src).name}")
+    if not data:
+        raise MediaError(f"empty brightness dump for {Path(src).name}")
     return round(data[0] / 255, 4)
 
 

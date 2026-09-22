@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import fonts as fontlib
-from .design import COMPONENTS, PALETTE_KEYS, ROLES, load_design
+from .design import COMPONENTS, DesignError, PALETTE_KEYS, ROLES, load_design
 
 ARCHETYPES = Path(__file__).resolve().parents[2] / "designs" / "archetypes"
 BASE_SIZES = {"headline": 150, "body": 100, "emphasis": 118, "quote": 92, "label": 64, "scripture": 128}
@@ -70,7 +70,8 @@ def accent_from_footage(log, fallback=FALLBACK_ACCENT) -> str:
                     best, best_score = (r, g, b), score
     if not best or best_score <= 0:
         return fallback
-    r, g, b = colorsys.hls_to_rgb(colorsys.rgb_to_hls(*best)[0], 0.58, min(1.0, max(0.35, colorsys.rgb_to_hls(*best)[2])))
+    hue, _, saturation = colorsys.rgb_to_hls(*best)
+    r, g, b = colorsys.hls_to_rgb(hue, 0.58, min(1.0, max(0.35, saturation)))
     return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
 
 
@@ -97,14 +98,20 @@ def _recipe(arch, pairing, accent) -> dict:
 
 def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archetypes=None, limit=3,
             catalogue=None, dirs=fontlib.FONT_DIRS) -> list:
+    """Compose design drafts. A font-layer failure is reported as a design failure: callers
+    of this module catch DesignGenError, and a raw FontError escaping here reached the CLI
+    as an untranslated traceback."""
     archetypes = archetypes or load_archetypes()
     moods = [m.lower() for m in brief_moods or []]
     ranked = sorted(archetypes, key=lambda a: (-len(set(moods) & {m.lower() for m in a.get("moods", [])}), a["id"]))
     accent = accent_from_footage(log)
     drafts = []
     for arch in ranked:
-        pairs = fontlib.pairings(arch.get("font_moods") or arch.get("moods", []), scripts=scripts,
-                                 catalogue=catalogue, installed_only=installed_only, dirs=dirs)
+        try:
+            pairs = fontlib.pairings(arch.get("font_moods") or arch.get("moods", []), scripts=scripts,
+                                     catalogue=catalogue, installed_only=installed_only, dirs=dirs)
+        except fontlib.FontError as e:
+            raise DesignGenError(f"the font catalogue is unusable: {e}") from e
         if pairs:
             # One font pairing per direction; offering 2–3 pairings per direction is a later milestone.
             recipe = _recipe(arch, pairs[0], accent)
@@ -126,6 +133,10 @@ def save_design(draft: Draft, out_path) -> Path:
     tmp.write_text(json.dumps(draft.recipe, ensure_ascii=False, indent=1), encoding="utf-8")
     try:
         load_design(tmp)           # fails loudly if the draft is not a valid design
+    except DesignError as e:
+        tmp.unlink(missing_ok=True)
+        # the temp name is an implementation detail; report the file the user asked for
+        raise DesignError(str(e).replace(str(tmp), str(out_path))) from None
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -155,6 +166,16 @@ def style_frame_plan(draft: Draft, log, out_dir, script_lines=None, duration=6.0
     shots = [_style_shot(clips[0], 0.0, half if len(clips) > 1 else duration)]
     if len(clips) > 1:
         shots.append(_style_shot(clips[1], shots[0]["out"], duration - shots[0]["out"]))
+    # The shots are clamped to the footage that exists, so the comp must be clamped to the
+    # shots. Otherwise a shoot of short clips ends on black and the style frame looks broken
+    # when the fault is only that nothing was long enough to fill it.
+    covered = round(max(shot["out"] for shot in shots), 3)
+    if covered < duration - 0.05:
+        duration, half = covered, round(covered / 2, 3)
+    if duration < 1.5:
+        raise DesignGenError(
+            f"the logged clips are too short to build a style frame ({duration:.2f}s of footage); "
+            "log a longer clip, or pass --duration to plan a shorter frame")
     plan = {"name": "STYLE_" + draft.id.upper().replace("-", "_"),
             "format": {"width": 3840, "height": 2160, "fps": 23.976, "duration": duration},
             "shots": shots, "voices": [], "graphics": [

@@ -75,7 +75,10 @@ class _Handler(SimpleHTTPRequestHandler):
         known = _known_ids(self._root)
         if not isinstance(draft_id, str) or not draft_id or (known and draft_id not in known):
             return self._json(400, {"ok": False, "error": f"unknown draft id {draft_id!r}"})
-        choice = {"id": draft_id, "note": payload.get("note") or None,
+        note = payload.get("note")
+        if note is not None and not isinstance(note, str):
+            return self._json(400, {"ok": False, "error": "note must be a string"})
+        choice = {"id": draft_id, "note": note or None,
                   "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
         (self._root / CHOICE_FILE).write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
         return self._json(200, {"ok": True})

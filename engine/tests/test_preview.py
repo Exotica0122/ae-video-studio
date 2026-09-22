@@ -103,5 +103,27 @@ class PreviewTest(unittest.TestCase):
         self.assertEqual(json.loads(reply), {})
 
 
+
+class NoteTypeTest(PreviewTest):
+    """The note is written to choice.json and read back by the CLI, so it must be text."""
+
+    def test_a_note_that_is_not_a_string_is_refused(self):
+        self.server, url = preview.serve(self.dir)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            post(url + "/choose", {"id": "paper-notebook-paperlogy", "note": {"oops": 1}})
+        self.assertEqual(caught.exception.code, 400)
+        self.assertIsNone(preview.read_choice(self.dir), "nothing should have been recorded")
+
+    def test_a_string_note_is_kept(self):
+        self.server, url = preview.serve(self.dir)
+        post(url + "/choose", {"id": "paper-notebook-paperlogy", "note": "warmer please"})
+        self.assertEqual(preview.read_choice(self.dir)["note"], "warmer please")
+
+    def test_no_note_at_all_is_still_fine(self):
+        self.server, url = preview.serve(self.dir)
+        post(url + "/choose", {"id": "paper-notebook-paperlogy"})
+        self.assertIsNone(preview.read_choice(self.dir)["note"])
+
+
 if __name__ == "__main__":
     unittest.main()

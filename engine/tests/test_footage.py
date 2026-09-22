@@ -27,7 +27,12 @@ class FootageTest(unittest.TestCase):
         self.assertEqual(log["errors"], [])
         clip = log["clips"][0]
         self.assertEqual(len(clip["frames"]), 3)
-        self.assertEqual([f["at"] for f in clip["frames"]], [0.5, 4.5, 8.5])
+        times = [f["at"] for f in clip["frames"]]
+        self.assertEqual(sorted(times), times, "frames are sampled in order")
+        self.assertGreater(times[0], 0, "not the very first frame, where a fade often is")
+        self.assertLess(times[-1], clip["duration"], "not past the end of the clip")
+        self.assertGreater(times[-1] - times[0], clip["duration"] * 0.5,
+                           "frames must span the clip, not cluster at its head")
         self.assertTrue(0 < clip["luma"] < 1)
         self.assertEqual(len(clip["frames"][0]["colors"]), 4)
         for rel in [f["file"] for f in clip["frames"]] + [clip["sheet"]]:
@@ -125,3 +130,27 @@ class FootageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FrameSamplingTest(unittest.TestCase):
+    """Sampling is proportional: a short clip should not be represented by one frame."""
+
+    def test_a_short_clip_still_earns_several_frames(self):
+        self.assertGreaterEqual(len(footage._frame_times(7.5, 4.0, 6)), 3,
+                                "the median clip of a real shoot was getting 1-2")
+
+    def test_more_duration_earns_more_frames_up_to_the_cap(self):
+        counts = [len(footage._frame_times(d, 4.0, 6)) for d in (2.0, 7.5, 12.0, 20.0, 600.0)]
+        self.assertEqual(counts, sorted(counts), "longer clips never get fewer frames")
+        self.assertEqual(counts[-1], 6, "max_frames is respected")
+
+    def test_frames_are_inset_from_both_ends(self):
+        times = footage._frame_times(10.0, 4.0, 6)
+        self.assertGreater(times[0], 0.0)
+        self.assertLess(times[-1], 10.0)
+
+    def test_a_clip_shorter_than_a_second_gets_its_middle(self):
+        self.assertEqual(footage._frame_times(0.6, 4.0, 6), [0.3])
+
+    def test_a_zero_length_clip_does_not_crash(self):
+        self.assertEqual(footage._frame_times(0, 4.0, 6), [0.0])

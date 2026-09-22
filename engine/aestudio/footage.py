@@ -36,11 +36,24 @@ def _tag(path: Path) -> str:
 
 
 def _frame_times(duration: float, every: float, max_frames: int) -> list:
-    times, t = [], 0.5
-    while len(times) < max_frames and t < max(duration - 0.2, 0.5):
-        times.append(round(t, 3))
-        t += every
-    return times or [0.0]
+    """Sample by proportion of the clip, not at a fixed interval from the head.
+
+    A fixed interval means a short clip gets one frame and a long one gets six, so a contact
+    sheet of a 7s clip showed a single frame next to four-frame sheets and told you almost
+    nothing. `every` now sets how many frames a clip earns; where they fall is spread evenly
+    across it, inset from the very first and last frames where cuts and fades live.
+    """
+    duration = max(0.0, float(duration))
+    if duration <= 0:
+        return [0.0]
+    if duration < 1.0:
+        return [round(duration / 2, 3)]
+    wanted = min(max(2, round(duration / max(every, 0.1)) + 1), max(max_frames, 1))
+    if wanted == 1:
+        return [round(duration / 2, 3)]
+    start, span = duration * 0.05, duration * 0.90
+    step = span / (wanted - 1)
+    return [round(start + i * step, 3) for i in range(wanted)]
 
 
 def log_footage(sources, out_dir, every: float = 4.0, max_frames: int = 6, sheet_cols: int = 4,

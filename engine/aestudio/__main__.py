@@ -156,7 +156,7 @@ def _drafts_from_dir(directory):
         notes = recipe.pop("_notes", [])
         drafts.append(Draft(id=recipe["id"], name=recipe.get("name", recipe["id"]), mood=recipe.get("mood", []),
                             recipe=recipe,
-                            fonts={r: s["font"] for r, s in recipe.get("tokens", {}).get("type", {}).items()},
+                            fonts=_fonts_of(recipe, directory),
                             notes=list(notes)))
     return drafts
 
@@ -207,6 +207,20 @@ def cmd_design_preview(a):
     print(json.dumps({"chosen": (choice or {}).get("id"), "note": (choice or {}).get("note"), "url": url},
                      ensure_ascii=False))
     return 0 if choice else 1
+
+
+def _fonts_of(recipe: dict, where) -> dict:
+    """Read the type tokens of a saved draft, blaming the file rather than the traceback.
+
+    drafts.json is written by design-propose but users do hand-edit it, and a role missing
+    its 'font' used to surface as a bare KeyError.
+    """
+    roles = recipe.get("tokens", {}).get("type", {})
+    missing = [role for role, spec in roles.items() if not isinstance(spec, dict) or not spec.get("font")]
+    if missing:
+        raise DesignGenError(f"{Path(where) / 'drafts.json'}: draft '{recipe.get('id', '?')}' has no font "
+                             f"for {', '.join(sorted(missing))}")
+    return {role: spec["font"] for role, spec in roles.items()}
 
 
 def cmd_design_choose(a):
