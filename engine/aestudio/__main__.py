@@ -13,6 +13,8 @@ from .design import DesignError, load_design
 from .doctor import DoctorError, format_report, run_checks
 from .designgen import DesignGenError, Draft, propose, save_design, style_frame_plan
 from .footage import log_footage
+from .grade import (GradeError, exposure_offsets, grade_plan, load_looks, looks_for,
+                     render_look_previews, save_grade)
 from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
 from .media import MediaError, probe
@@ -28,7 +30,7 @@ from .videoqa import (QAError, QAReport, decode_check, legibility, mix_loudness,
                       stills as qa_stills, stream_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -334,6 +336,37 @@ def cmd_qa(a):
     return 1 if report.failures else 0
 
 
+def cmd_grade_propose(a):
+    log = _load_log(a.analysis)
+    looks = looks_for(a.mood, limit=a.limit)
+    index = render_look_previews(looks, log, a.out)
+    match = exposure_offsets(log)
+    print(json.dumps({"looks": [l.id for l in looks], "index": str(index),
+                      "target_luma": match["target_luma"],
+                      "beyond_match": [b["name"] for b in match["beyond_match"]]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_grade_choose(a):
+    choice = read_choice(a.dir) or {}
+    look_id = a.id or choice.get("id")
+    if not look_id:
+        raise GradeError(f"no look chosen yet in {a.dir} — run grade-preview and click one, or pass --id")
+    look = next((l for l in load_looks() if l.id == look_id), None)
+    if look is None:
+        raise GradeError(f"unknown look '{look_id}'")
+    log = _load_log(a.analysis)
+    match = exposure_offsets(log, target=a.target_luma)
+    path = save_grade(grade_plan(look, match, design_hint=a.design_hint or ""), a.out)
+    for clip in match["beyond_match"]:
+        print(f"warning: {clip['name']} is {clip['stops']:+.2f} stops from the match target "
+              f"(luma {clip['luma']:.3f}) — clamped; consider excluding or relighting it", file=sys.stderr)
+    print(json.dumps({"grade": str(path), "look": look.id, "note": choice.get("note"),
+                      "matched": len(match["offsets"]), "beyond_match": len(match["beyond_match"])},
+                     ensure_ascii=False))
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -448,6 +481,20 @@ def parser():
     qa.add_argument("--share", help="also write a 1080p share copy to this path")
     qa.add_argument("--target", type=float, default=-16.0)
     qa.set_defaults(fn=cmd_qa)
+    gp = sub.add_parser("grade-propose")
+    gp.add_argument("--analysis", required=True)
+    gp.add_argument("--out", required=True)
+    gp.add_argument("--mood", nargs="*", default=[])
+    gp.add_argument("--limit", type=int, default=3)
+    gp.set_defaults(fn=cmd_grade_propose)
+    gc = sub.add_parser("grade-choose")
+    gc.add_argument("--dir", required=True)
+    gc.add_argument("--analysis", required=True)
+    gc.add_argument("--out", required=True)
+    gc.add_argument("--id")
+    gc.add_argument("--target-luma", type=float, dest="target_luma")
+    gc.add_argument("--design-hint", dest="design_hint")
+    gc.set_defaults(fn=cmd_grade_choose)
     return p
 
 

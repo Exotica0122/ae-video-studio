@@ -1,0 +1,34 @@
+[
+  {
+    "id": "neutral",
+    "name": "Neutral",
+    "mood": ["clean", "documentary", "honest"],
+    "note": "What the camera saw, with exposure matched across shots and nothing else.",
+    "preview": "null",
+    "ae": {"exposure": 0, "contrast": 0, "temperature": 0, "tint": 0, "saturation": 0, "shadows": 0, "highlights": 0}
+  },
+  {
+    "id": "warm-airy",
+    "name": "Warm & airy",
+    "mood": ["warm", "hopeful", "community", "gentle"],
+    "note": "Lifted shadows, a touch of warmth, slightly softened contrast. Flatters skin and daylight interiors.",
+    "preview": "exposure=exposure=0.12,eq=contrast=0.95:saturation=1.06,colortemperature=temperature=5000:mix=0.45",
+    "ae": {"exposure": 0.12, "contrast": -5, "temperature": 12, "tint": 2, "saturation": 6, "shadows": 8, "highlights": -4}
+  },
+  {
+    "id": "cool-clean",
+    "name": "Cool & clean",
+    "mood": ["calm", "modern", "clear", "restrained"],
+    "note": "Cooler white balance, a little more contrast, restrained colour. Reads as considered rather than cosy.",
+    "preview": "eq=contrast=1.07:saturation=0.95,colortemperature=temperature=8000:mix=0.4",
+    "ae": {"exposure": 0, "contrast": 7, "temperature": -10, "tint": -2, "saturation": -5, "shadows": -3, "highlights": 2}
+  },
+  {
+    "id": "filmic",
+    "name": "Filmic",
+    "mood": ["cinematic", "dramatic", "premium"],
+    "note": "Deeper contrast with the shadows lifted off black, desaturated a step. Wants good light to begin with.",
+    "preview": "exposure=exposure=-0.05,eq=contrast=1.18:saturation=0.9:gamma=1.04",
+    "ae": {"exposure": -0.05, "contrast": 18, "temperature": 3, "tint": 0, "saturation": -10, "shadows": 12, "highlights": -8}
+  }
+]
