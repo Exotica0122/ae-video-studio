@@ -19,6 +19,11 @@ Needs `analysis/footage.json` from the `footage-logging` skill.
 
    Writes `<project>/preview/index.html` (mockups built from the video's own frames) and `drafts.json`.
 
+   `--limit` sets how many **directions** to propose (default 3); `--pairings` how many typefaces
+   each direction is offered with (default 2, the spec asks for 2–3). Every pairing is its own card
+   with its own Choose button, so three directions at two typefaces is six cards — say that to the
+   user before they scroll, and point out which cards are the same direction in different type.
+
    `--lines` is a JSON array of caption lines in the `lines` format from `docs/components.md`, e.g.
    `[["작은 "], [{"hl": "한 걸음"}, "에서 시작합니다"]]`. Use a real line from the script: placeholder text
    is the wrong length and the wrong words, so the readability check only means something with the

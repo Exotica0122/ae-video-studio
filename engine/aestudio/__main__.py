@@ -190,7 +190,7 @@ def _pick(directory, draft_id):
 def cmd_design_propose(a):
     log = _load_log(a.analysis)
     drafts = propose(a.mood, log=log, scripts=tuple(a.scripts), installed_only=not a.allow_uninstalled_fonts,
-                     limit=a.limit)
+                     limit=a.limit, pairings=a.pairings)
     index = render_mockups(drafts, log, a.out, script_lines=_script_lines(a.lines))
     print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index),
                       "notes": [n for d in drafts for n in d.notes]}, ensure_ascii=False))
@@ -436,7 +436,9 @@ def parser():
     dp.add_argument("--mood", action="append", default=[])
     dp.add_argument("--scripts", nargs="+", default=["ko"])
     dp.add_argument("--allow-uninstalled-fonts", action="store_true", dest="allow_uninstalled_fonts")
-    dp.add_argument("--limit", type=int, default=3)
+    dp.add_argument("--limit", type=int, default=3, help="how many design directions")
+    dp.add_argument("--pairings", type=int, default=2,
+                    help="typefaces offered per direction (spec: 2-3)")
     dp.add_argument("--lines", help="JSON array of real caption lines to typeset in the mockups")
     dp.set_defaults(fn=cmd_design_propose)
     dv = sub.add_parser("design-preview")

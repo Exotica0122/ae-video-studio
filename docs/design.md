@@ -251,8 +251,9 @@ Grade
 6. **`audio-post`** and **`video-qa`** scripts (ducking, placement, loudness, legibility checks). *(done)*
 7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) *(done)*.
 8. **`design-system`** gate 2: generating new directions, style frames, font pairings,
-   `preview/index.html`, "save this design". *(done, Milestone 2a — one font pairing per direction;
-   offering 2–3 pairings per direction is deferred to a later milestone)*
+   `preview/index.html`, "save this design". *(done)* Each direction is offered with 2–3
+   typefaces (`design-propose --pairings`); every pairing is its own card with its own
+   Choose button, so no extra affordance was needed.
 9. **`video-director`** orchestration + `studio-doctor`. *(done)*
 10. Try on a second, different kind of video; fix what doesn't generalise.
 

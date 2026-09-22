@@ -97,31 +97,41 @@ def _recipe(arch, pairing, accent) -> dict:
 
 
 def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archetypes=None, limit=3,
-            catalogue=None, dirs=fontlib.FONT_DIRS) -> list:
-    """Compose design drafts. A font-layer failure is reported as a design failure: callers
-    of this module catch DesignGenError, and a raw FontError escaping here reached the CLI
-    as an untranslated traceback."""
+            catalogue=None, dirs=fontlib.FONT_DIRS, pairings=2) -> list:
+    """Compose design drafts: `limit` directions, each offered with up to `pairings` typefaces.
+
+    A font-layer failure is reported as a design failure: callers of this module catch
+    DesignGenError, and a raw FontError escaping here reached the CLI as an untranslated
+    traceback.
+
+    Each pairing becomes its own draft, because a draft already carries a unique id and its own
+    Choose button — the preview page needs nothing new to offer a second typeface.
+    """
     archetypes = archetypes or load_archetypes()
     moods = [m.lower() for m in brief_moods or []]
     ranked = sorted(archetypes, key=lambda a: (-len(set(moods) & {m.lower() for m in a.get("moods", [])}), a["id"]))
     accent = accent_from_footage(log)
-    drafts = []
+    drafts, directions = [], 0
     for arch in ranked:
+        if directions >= limit:
+            break
         try:
             pairs = fontlib.pairings(arch.get("font_moods") or arch.get("moods", []), scripts=scripts,
                                      catalogue=catalogue, installed_only=installed_only, dirs=dirs)
         except fontlib.FontError as e:
             raise DesignGenError(f"the font catalogue is unusable: {e}") from e
-        if pairs:
-            # One font pairing per direction; offering 2–3 pairings per direction is a later milestone.
-            recipe = _recipe(arch, pairs[0], accent)
+        if not pairs:
+            continue
+        directions += 1
+        seen = set()
+        for pair in pairs[:max(1, int(pairings))]:
+            recipe = _recipe(arch, pair, accent)
+            if recipe["id"] in seen:
+                continue                      # two pairings sharing a headline font are one option
+            seen.add(recipe["id"])
             drafts.append(Draft(id=recipe["id"], name=recipe["name"], mood=recipe["mood"], recipe=recipe,
-                                fonts={r: s["font"] for r, s in recipe["tokens"]["type"].items()},
-                                notes=list(pairs[0]["notes"])))
-        if len(drafts) >= limit:
-            break
-    if not drafts:
-        raise DesignGenError("no design draft could be composed; check the font catalogue and archetypes")
+                                fonts={r: spec["font"] for r, spec in recipe["tokens"]["type"].items()},
+                                notes=list(pair["notes"])))
     return drafts
 
 

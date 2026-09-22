@@ -146,5 +146,37 @@ class StyleFrameDurationTest(unittest.TestCase):
                             "the end card starts after the comp has ended")
 
 
+
+class FontPairingsTest(unittest.TestCase):
+    """docs/design.md gate 2 asks for 2-3 typefaces per direction, not one."""
+
+    def test_each_direction_is_offered_with_more_than_one_typeface(self):
+        drafts = designgen.propose(["warm", "hopeful"], log=None, limit=2, pairings=2)
+        directions = {d.recipe["components"]["caption"]["treatment"] + d.id.rsplit("-", 1)[0]
+                      for d in drafts}
+        self.assertGreater(len(drafts), len(directions), "no direction got a second typeface")
+
+    def test_the_number_of_directions_is_capped_by_limit_not_by_draft_count(self):
+        drafts = designgen.propose(["warm"], log=None, limit=2, pairings=3)
+        roots = {d.id.rsplit("-", 1)[0] for d in drafts}
+        self.assertEqual(len(roots), 2, "limit counts directions, not cards")
+
+    def test_one_pairing_reproduces_the_old_behaviour(self):
+        drafts = designgen.propose(["warm"], log=None, limit=3, pairings=1)
+        self.assertEqual(len(drafts), len({d.id for d in drafts}))
+        self.assertEqual(len(drafts), 3)
+
+    def test_every_draft_has_a_distinct_id_so_the_choose_button_is_unambiguous(self):
+        drafts = designgen.propose(["warm", "hopeful"], log=None, limit=3, pairings=3)
+        ids = [d.id for d in drafts]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_each_draft_carries_the_fonts_of_its_own_pairing(self):
+        drafts = designgen.propose(["warm", "hopeful"], log=None, limit=1, pairings=2)
+        if len(drafts) < 2:
+            self.skipTest("this machine's catalogue offers only one pairing for that mood")
+        self.assertNotEqual(drafts[0].fonts, drafts[1].fonts, "both cards would show the same type")
+
+
 if __name__ == "__main__":
     unittest.main()
