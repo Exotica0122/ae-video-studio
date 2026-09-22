@@ -125,6 +125,43 @@ def _is_running() -> bool:
     return bool(out.stdout.strip())
 
 
+BRIDGE_SRC = Path(os.environ.get("AESTUDIO_BRIDGE_SRC", "~/.ae-video-studio/after-effects-mcp")).expanduser()
+
+
+def check_bridge_server(src=None, panel_active: bool = False) -> Check:
+    """The MCP server this plugin talks to, built by bridge/install.sh.
+
+    A build somewhere this check cannot see is not a failure when the panel has plainly been
+    answering: telling someone to reinstall a bridge that works is worse than saying nothing.
+    """
+    src = Path(src) if src is not None else BRIDGE_SRC
+    if (src / "build" / "index.js").exists():
+        return Check("bridge-server", "ok", str(src))
+    if panel_active:
+        return Check("bridge-server", "warn",
+                     f"no build at {src}, but the panel has been answering — it is installed elsewhere",
+                     "Set AESTUDIO_BRIDGE_SRC to that folder so this check can find it. Nothing is "
+                     "broken; only this check is blind.")
+    if src.exists():
+        return Check("bridge-server", "fail", f"{src} exists but has no build/index.js",
+                     "Run `npm install && npm run build` in that folder, or delete it and re-run "
+                     "bridge/install.sh.")
+    return Check("bridge-server", "fail", f"the after-effects MCP server is not built at {src}",
+                 "Run bridge/install.sh (clones upstream at the recorded commit, applies "
+                 "runJsx.patch and builds), or set AESTUDIO_BRIDGE_SRC if it lives elsewhere.")
+
+
+def panel_has_answered(root=None, now=None, within_days: float = STALE_RESULT_DAYS) -> bool:
+    """Has the After Effects panel produced a result recently enough to count as alive?"""
+    root = Path(root) if root is not None else DEFAULT_ROOT
+    result = root / "ae_mcp_result.json"
+    try:
+        age_days = ((now or time.time()) - result.stat().st_mtime) / 86400
+    except OSError:
+        return False
+    return age_days <= within_days
+
+
 def check_bridge(root=None, now=None) -> list:
     root = Path(root) if root is not None else DEFAULT_ROOT
     if not root.exists():
@@ -212,6 +249,7 @@ def run_checks(*, bridge_root=None, apps=APPLICATIONS, design=None, ping=False,
     checks += check_ffmpeg(which=which)
     checks.append(check_whisper(which=which))
     checks.append(check_after_effects(apps=apps))
+    checks.append(check_bridge_server(panel_active=panel_has_answered(bridge_root)))
     checks += check_bridge(root=bridge_root)
     checks += check_fonts(catalogue=catalogue, dirs=dirs, design=design)
     if ping:

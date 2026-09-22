@@ -248,9 +248,8 @@ Grade
    that project (outside the repo); compare stills and per-section loudness with its approved
    render. Then re-render the same edit with the second design, changing only `design`.
    Add a small fictional example under `examples/` for anyone else to test with.
-6. **`audio-post`** and **`video-qa`** scripts (ducking, placement, loudness, legibility checks).
-7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) is not
-   part of this milestone.
+6. **`audio-post`** and **`video-qa`** scripts (ducking, placement, loudness, legibility checks). *(done)*
+7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) *(done)*.
 8. **`design-system`** gate 2: generating new directions, style frames, font pairings,
    `preview/index.html`, "save this design". *(done, Milestone 2a — one font pairing per direction;
    offering 2–3 pairings per direction is deferred to a later milestone)*
@@ -259,8 +258,14 @@ Grade
 
 Milestone 2a shipped `footage-logging` and `design-system` (steps 7–8, minus `color-grade`).
 Step 9 shipped next: `video-director` (project layout, gate tracking, decision log) and
-`studio-doctor` (environment, bridge and font checks). What remains: grade previews,
-`audio-post`, `video-qa`.
+`studio-doctor` (environment, bridge and font checks). Then `audio-post`, `video-qa` and
+`color-grade` completed steps 6–7, so every skill in §4 now exists.
+
+What remains is not new skills but proof and packaging: the step-5 parity test (rebuild the
+first production from an edit.json and compare stills and per-section loudness against its
+approved master), the open questions in §10, and the field work on the `field-work` branch
+(a third treatment family, an NFC path fix and photo-on-any-graphic, written while using the
+engine on a second production — 1,370 lines with no tests yet).
 
 `studio-doctor` reads only files by default; `--ping` is the one opt-in that touches After
 Effects, because the bridge runs one job at a time and a diagnostic must never stall a render.

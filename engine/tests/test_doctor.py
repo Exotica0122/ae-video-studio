@@ -88,6 +88,41 @@ class BridgeCheckTest(unittest.TestCase):
             self.assertIn("days old", stale.detail)
 
 
+class BridgeServerTest(unittest.TestCase):
+    def test_a_built_server_is_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp) / "build"
+            build.mkdir()
+            (build / "index.js").write_text("//", encoding="utf-8")
+            self.assertEqual(doctor.check_bridge_server(tmp).status, "ok")
+
+    def test_a_missing_build_fails_and_names_the_installer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            check = doctor.check_bridge_server(Path(tmp) / "absent")
+            self.assertEqual(check.status, "fail")
+            self.assertIn("install.sh", check.fix)
+
+    def test_a_working_panel_downgrades_a_missing_build_to_a_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            check = doctor.check_bridge_server(Path(tmp) / "absent", panel_active=True)
+            self.assertEqual(check.status, "warn", "do not tell someone to reinstall a bridge that works")
+            self.assertIn("installed elsewhere", check.detail)
+
+    def test_a_half_built_folder_is_distinguished_from_a_missing_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            check = doctor.check_bridge_server(tmp)
+            self.assertEqual(check.status, "fail")
+            self.assertIn("npm run build", check.fix)
+
+    def test_panel_liveness_comes_from_the_result_file_age(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertFalse(doctor.panel_has_answered(tmp), "no result file at all")
+            (Path(tmp) / "ae_mcp_result.json").write_text("{}", encoding="utf-8")
+            self.assertTrue(doctor.panel_has_answered(tmp))
+            old = time.time() + (doctor.STALE_RESULT_DAYS + 5) * 86400
+            self.assertFalse(doctor.panel_has_answered(tmp, now=old))
+
+
 class DesignFontCheckTest(unittest.TestCase):
     """A design names PostScript names; the filesystem gives file stems. They differ."""
 

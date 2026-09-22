@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "after-effects": {
+      "command": "node",
+      "args": ["${AESTUDIO_BRIDGE_SRC:-${HOME}/.ae-video-studio/after-effects-mcp}/build/index.js"],
+      "env": {}
+    }
+  }
+}
