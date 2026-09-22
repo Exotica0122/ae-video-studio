@@ -1,5 +1,5 @@
 {
-  "name": "ae-video-studio-dev",
+  "name": "ae-video-studio",
   "owner": { "name": "Exotica0122" },
   "plugins": [
     { "name": "ae-video-studio", "source": "./", "description": "Brief-to-4K motion-designed videos in After Effects." }

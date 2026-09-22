@@ -9,6 +9,9 @@ key stills → review render → master).
 > The design is in [`docs/design.md`](docs/design.md). Skills were generalised from a first
 > real production; no project footage, audio, names or logos are kept in this repo.
 
+<sub>An independent project, not affiliated with or endorsed by Adobe. Adobe and After Effects
+are trademarks of Adobe Inc.</sub>
+
 ## Demo
 
 <p align="center">
@@ -28,6 +31,17 @@ One edit plan, built with `--design notebook` (left) and `--design cinematic-min
 The story, timing and text stay the same; typography, layout, colour and motion change with the design.
 
 ![The same three moments rendered in the notebook and cinematic-minimal designs](docs/media/two-designs.png)
+
+## Install
+
+In Claude Code:
+
+```
+/plugin marketplace add Exotica0122/ae-video-studio
+/plugin install ae-video-studio@ae-video-studio
+```
+
+Then check the requirements below with `aestudio doctor`.
 
 ## Requirements
 
@@ -69,11 +83,13 @@ python3 -m aestudio design-preview --dir /tmp/demo-preview
 
 See `docs/components.md` for the edit-plan graphics and `skills/ae-build-render/SKILL.md` for the full workflow.
 
-## Local plugin install
+## Working on the plugin
+
+Install from your clone instead of GitHub so your changes load:
 
 ```
-/plugin marketplace add ~/github.com/Exotica0122/ae-video-studio
-/plugin install ae-video-studio@ae-video-studio-dev
+/plugin marketplace add /path/to/your/ae-video-studio
+/plugin install ae-video-studio@ae-video-studio
 ```
 
 ## Layout
