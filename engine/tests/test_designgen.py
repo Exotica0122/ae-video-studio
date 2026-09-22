@@ -69,9 +69,9 @@ class DesignGenTest(unittest.TestCase):
             for name in ("a.mp4", "b.mp4"):
                 (Path(d) / name).write_text("x")
             log = json.loads(json.dumps(LOG).replace("/tmp/", str(Path(d)) + "/"))
-            plan_path = designgen.style_frame_plan(draft, log, Path(d) / "style", duration=6.0)
+            plan_path = designgen.style_frame_plan(draft, log, Path(d) / "style", duration=10.0)
             plan = load_plan(plan_path)
-        self.assertEqual(plan.format.duration, 6.0)
+        self.assertEqual(plan.format.duration, 10.0)
         self.assertEqual(plan.voices, [])
         self.assertEqual({g["type"] for g in plan.graphics}, {"caption", "lower-third", "end-card"})
         self.assertTrue(plan.shots)
@@ -86,7 +86,7 @@ class DesignGenTest(unittest.TestCase):
             log = {"clips": [{"name": name, "path": str(Path(d) / name), "duration": length,
                               "luma": 0.9 if name == "short.mp4" else 0.3, "frames": []}
                              for name, length in sources.items()], "audio": [], "errors": []}
-            plan = load_plan(designgen.style_frame_plan(draft, log, Path(d) / "style", duration=6.0))
+            plan = load_plan(designgen.style_frame_plan(draft, log, Path(d) / "style", duration=10.0))
         self.assertEqual(plan.shots[0].clip.name, "long.mp4")    # brighter, but 2s cannot hold 1s + 3s
         for shot in plan.shots:
             self.assertGreater(shot.end, shot.start, shot.clip.name)
@@ -117,29 +117,36 @@ class StyleFrameDurationTest(unittest.TestCase):
                 "clips": [{"name": f"c{i}.MP4", "path": f"{root}/c{i}.MP4", "luma": 0.5,
                            "duration": d, "frames": []} for i, d in enumerate(durations)]}
 
-    def test_short_clips_shrink_the_comp_instead_of_leaving_black(self):
+    def test_short_clips_shrink_the_footage_but_not_the_end_card(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = designgen.style_frame_plan(self._draft(), self._log([2.2, 2.0]), tmp, duration=6.0)
+            path = designgen.style_frame_plan(self._draft(), self._log([2.2, 2.0]), tmp, duration=10.0)
             plan = json.loads(Path(path).read_text(encoding="utf-8"))
-            covered = max(s["out"] for s in plan["shots"])
-            self.assertAlmostEqual(plan["format"]["duration"], covered, places=2,
-                                   msg="the comp outlasts its footage")
+            shots_end = max(s["out"] for s in plan["shots"])
+            card = [g for g in plan["graphics"] if g["type"] == "end-card"][0]
+            self.assertLess(shots_end, 4.7, "the footage section is limited by the clips")
+            self.assertAlmostEqual(plan["format"]["duration"] - card["in"], designgen.STYLE_END_LEN,
+                                   places=2, msg="the end card needs no footage, so it keeps its time")
 
     def test_long_clips_keep_the_requested_duration(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = designgen.style_frame_plan(self._draft(), self._log([30.0, 30.0]), tmp, duration=6.0)
+            path = designgen.style_frame_plan(self._draft(), self._log([30.0, 30.0]), tmp, duration=10.0)
             plan = json.loads(Path(path).read_text(encoding="utf-8"))
-            self.assertEqual(plan["format"]["duration"], 6.0)
+            self.assertEqual(plan["format"]["duration"], 10.0)
 
-    def test_footage_too_short_to_style_says_so(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(designgen.DesignGenError) as caught:
-                designgen.style_frame_plan(self._draft(), self._log([0.4]), tmp, duration=6.0)
-            self.assertIn("too short", str(caught.exception))
+    def test_the_rows_finish_revealing_before_the_comp_fades(self):
+        for clips in ([30.0, 30.0], [2.2, 2.0], [1.4]):
+            with self.subTest(clips=clips), tempfile.TemporaryDirectory() as tmp:
+                path = designgen.style_frame_plan(self._draft(), self._log(clips), tmp, duration=10.0)
+                plan = json.loads(Path(path).read_text(encoding="utf-8"))
+                card = [g for g in plan["graphics"] if g["type"] == "end-card"][0]
+                rows_at = card["in"] + 2.8          # notebook reveals rows at E+2.8
+                fade_at = plan["format"]["duration"] - plan["fade_out"]
+                self.assertLess(rows_at, fade_at,
+                                "the info rows would never be seen at this duration")
 
     def test_the_end_card_still_fits_inside_the_shortened_comp(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = designgen.style_frame_plan(self._draft(), self._log([2.4, 2.4]), tmp, duration=6.0)
+            path = designgen.style_frame_plan(self._draft(), self._log([2.4, 2.4]), tmp, duration=10.0)
             plan = json.loads(Path(path).read_text(encoding="utf-8"))
             end_card = [g for g in plan["graphics"] if g["type"] == "end-card"][0]
             self.assertLess(end_card["in"], plan["format"]["duration"],

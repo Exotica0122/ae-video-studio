@@ -178,18 +178,19 @@ def end_card_notebook_page(ctx, g, opts):
     _page(ctx, eid, E, None, E + 0.55)
 
     # polaroid: white frame + moving photo, dropped in with a settle
-    PX, PY, PW, PH = r3(0.294 * W), r3(0.5 * H), px(1560), px(1180)
-    pol = f"{eid}_POLAROID"
-    drop = r3(E + 0.75)
-    ops.add("group", id=pol, parent=eid, anchor=[PX, PY], position=[PX, PY],
-            expr={"position": f"var k=bo((time-{drop})/0.8);value+[0,{-px(260)}*(1-k)]",
-                  "rotation": f"var k=bo((time-{drop})/0.8);3+5*(1-k)"})
-    pop = f"100*so((time-{drop})/0.35)"
-    ops.add("rect", id=f"{pol}_FRAME", parent=pol, color=[1, 1, 1], size=[PW, PH], center=[PX, PY], roundness=px(6),
-            expr={"opacity": pop}, **sp)
-    ops.add("effect", layer=f"{pol}_FRAME", match="ADBE Drop Shadow", props={"2": 95, "3": 180, "4": px(26), "5": px(90)})
     photo = g.get("photo")
-    if photo:
+    if photo:                      # an empty frame reads as a missing image, not as a design
+        PX, PY, PW, PH = r3(0.294 * W), r3(0.5 * H), px(1560), px(1180)
+        pol = f"{eid}_POLAROID"
+        drop = r3(E + 0.75)
+        ops.add("group", id=pol, parent=eid, anchor=[PX, PY], position=[PX, PY],
+                expr={"position": f"var k=bo((time-{drop})/0.8);value+[0,{-px(260)}*(1-k)]",
+                      "rotation": f"var k=bo((time-{drop})/0.8);3+5*(1-k)"})
+        pop = f"100*so((time-{drop})/0.35)"
+        ops.add("rect", id=f"{pol}_FRAME", parent=pol, color=[1, 1, 1], size=[PW, PH], center=[PX, PY],
+                roundness=px(6), expr={"opacity": pop}, **sp)
+        ops.add("effect", layer=f"{pol}_FRAME", match="ADBE Drop Shadow",
+                props={"2": 95, "3": 180, "4": px(26), "5": px(90)})
         ops.add("footage", id=f"{pol}_PHOTO", parent=pol, file=photo["clip"], start=E, end=r3(ctx.duration),
                 src_in=photo.get("src_in", 0), stretch=photo.get("stretch"), width=r3(PW - px(70)),
                 position=[PX, r3(PY - px(60))], mask=[r3(PW - px(70)), r3(PH - px(200))],

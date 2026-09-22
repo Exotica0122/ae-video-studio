@@ -16,6 +16,7 @@ ARCHETYPES = Path(__file__).resolve().parents[2] / "designs" / "archetypes"
 BASE_SIZES = {"headline": 150, "body": 100, "emphasis": 118, "quote": 92, "label": 64, "scripture": 128}
 FALLBACK_ACCENT = "#C9A46A"
 STYLE_SRC_IN = 1.0             # skip the first second of a clip; style frames want settled footage
+STYLE_END_LEN = 5.0            # the end card reveals its rows at +2.8s and needs to finish before the fade
 
 
 class DesignGenError(ValueError):
@@ -162,36 +163,35 @@ def _style_shot(clip, start: float, segment: float) -> dict:
     return {"clip": clip["path"], "in": round(start, 3), "out": round(start + segment, 3), "src_in": src_in}
 
 
-def style_frame_plan(draft: Draft, log, out_dir, script_lines=None, duration=6.0) -> Path:
+def style_frame_plan(draft: Draft, log, out_dir, script_lines=None, duration=10.0) -> Path:
     brightest = sorted((c for c in (log or {}).get("clips", []) if c.get("path")),
                        key=lambda c: -(c.get("luma") or 0))
-    half = round(duration / 2, 3)
+    want = round(duration - STYLE_END_LEN - 0.3, 3)
     # Prefer clips long enough to hold the whole segment; fall back to the brightest ones.
-    clips = sorted(brightest, key=lambda c: float(c.get("duration") or 0) < STYLE_SRC_IN + half)[:2]
+    clips = sorted(brightest, key=lambda c: float(c.get("duration") or 0) < STYLE_SRC_IN + want)[:2]
     if not clips:
         raise DesignGenError("style frames need at least one logged clip with a path")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     lines = script_lines or [["이 화면의 글자 크기와"], ["색이 ", {"hl": "잘 보이는지"}, " 확인해 주세요."]]
-    shots = [_style_shot(clips[0], 0.0, half if len(clips) > 1 else duration)]
-    if len(clips) > 1:
-        shots.append(_style_shot(clips[1], shots[0]["out"], duration - shots[0]["out"]))
-    # The shots are clamped to the footage that exists, so the comp must be clamped to the
-    # shots. Otherwise a shoot of short clips ends on black and the style frame looks broken
-    # when the fault is only that nothing was long enough to fill it.
-    covered = round(max(shot["out"] for shot in shots), 3)
-    if covered < duration - 0.05:
-        duration, half = covered, round(covered / 2, 3)
-    if duration < 1.5:
+    shots = [_style_shot(clips[0], 0.0, want if len(clips) > 1 else want)]
+    if len(clips) > 1 and shots[0]["out"] < want:
+        shots.append(_style_shot(clips[1], shots[0]["out"], want - shots[0]["out"]))
+    # Shots are clamped to the footage that exists; the end card is a full-frame page and
+    # needs none, so it always gets its own time after them.
+    half = round(max(shot["out"] for shot in shots), 3)
+    if half < 0.8:
         raise DesignGenError(
-            f"the logged clips are too short to build a style frame ({duration:.2f}s of footage); "
-            "log a longer clip, or pass --duration to plan a shorter frame")
+            f"the logged clips give only {half:.2f}s of footage, too little to judge a design on; "
+            "log a longer clip")
+    duration = round(half + 0.3 + STYLE_END_LEN, 3)
     plan = {"name": "STYLE_" + draft.id.upper().replace("-", "_"),
             "format": {"width": 3840, "height": 2160, "fps": 23.976, "duration": duration},
             "shots": shots, "voices": [], "graphics": [
                 {"type": "caption", "voice": None, "lines": lines, "in": 0.3, "out": half + 0.2},
                 {"type": "lower-third", "at": 0.8, "dur": half, "name": "이름 예시", "role": "역할 예시"},
                 {"type": "end-card", "in": half + 0.3, "title": "제목 예시", "year": 2027,
+                 "photo": {"clip": str(clips[0]["path"]), "src_in": STYLE_SRC_IN},
                  "tagline": "한 줄 설명이 들어갑니다",
                  "rows": [{"label": "안내", "values": ["첫째 줄", "둘째 줄"]}]}],
             "fade_out": 0.5}
