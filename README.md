@@ -1,5 +1,7 @@
 # ae-video-studio
 
+[![CI](https://github.com/Exotica0122/ae-video-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/Exotica0122/ae-video-studio/actions/workflows/ci.yml)
+
 A Claude Code plugin for making polished, motion-designed videos in **Adobe After Effects**:
 from footage, voice recordings and a short brief to a 4K master, with a preview you approve
 before every creative or expensive step (story → design & fonts → grade → 15 s test →
