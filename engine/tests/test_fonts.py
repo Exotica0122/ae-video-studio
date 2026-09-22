@@ -58,9 +58,7 @@ class FontsTest(unittest.TestCase):
         self.assertTrue(any(p["headline"].style != p["body"].style for p in pairs))
 
     def test_pairings_can_include_uninstalled_with_a_note(self):
-        # Fixture catalogue: two families genuinely installed on this machine, plus one whose
-        # PostScript name cannot exist on any machine, so the "uninstalled" case never depends
-        # on which fonts happen to be on disk here.
+        # Two families from the font fixture plus one whose PostScript name exists nowhere.
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "fonts.json"
             path.write_text(json.dumps([
