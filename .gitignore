@@ -13,3 +13,6 @@ node_modules/
 examples/demo/media/
 examples/demo/transcripts/
 examples/demo/build/
+
+# README demo media is the exception
+!docs/media/*.mp4

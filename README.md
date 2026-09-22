@@ -9,6 +9,26 @@ key stills → review render → master).
 > The design is in [`docs/design.md`](docs/design.md). Skills were generalised from a first
 > real production; no project footage, audio, names or logos are kept in this repo.
 
+## Demo
+
+<p align="center">
+  <a href="docs/media/demo.mp4"><img src="docs/media/demo.gif" alt="ae-video-studio demo: title card, interview with name tag and pull quote, end card" width="720"></a>
+  <br>
+  <sub><a href="docs/media/demo.mp4">Watch the full 40 s cut with sound (MP4)</a></sub>
+</p>
+
+This cut was built and rendered in After Effects from [`examples/demo/edit.json`](examples/demo/edit.json).
+The footage is placeholder gradients made by `make_media.py`. Everything on top of it came from
+the plugin: title card, word-timed captions with highlight sweeps, name tag, pull quote,
+end card with event details, the music bed with ducking under voice, and the whoosh SFX.
+
+### Same edit, two designs
+
+One edit plan, built with `--design notebook` (left) and `--design cinematic-minimal` (right).
+The story, timing and text stay the same; typography, layout, colour and motion change with the design.
+
+![The same three moments rendered in the notebook and cinematic-minimal designs](docs/media/two-designs.png)
+
 ## Requirements
 
 - After Effects 2025+ with the MCP Bridge Auto panel (Auto-run on)
