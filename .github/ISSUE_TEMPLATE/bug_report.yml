@@ -1,0 +1,53 @@
+name: Bug report
+description: Something went wrong while making a video
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where in the flow
+      options:
+        - Setup / doctor
+        - Story and edit plan (video-director)
+        - Footage logging
+        - Design and fonts
+        - Colour grade
+        - Audio post
+        - Build and render in After Effects
+        - Video QA
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: Output of `cd engine && python3 -m aestudio doctor --ping`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output or logs
+      description: The full error, and any stills or render logs that show the problem. Remove anything private first.
+      render: text
+  - type: input
+    id: ae-version
+    attributes:
+      label: After Effects version
+      placeholder: e.g. 25.2
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: macOS version
+      placeholder: e.g. 15.4
