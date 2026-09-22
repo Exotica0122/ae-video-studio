@@ -17,10 +17,12 @@ are trademarks of Adobe Inc.</sub>
 ## Demo
 
 <p align="center">
-  <a href="docs/media/demo.mp4"><img src="docs/media/demo.gif" alt="ae-video-studio demo: title card, interview with name tag and pull quote, end card" width="720"></a>
-  <br>
-  <sub><a href="docs/media/demo.mp4">Watch the full 40 s cut with sound (MP4)</a></sub>
+  <img src="docs/media/demo.gif" alt="ae-video-studio demo: title card, interview with name tag and pull quote, end card" width="720">
 </p>
+
+The full 40 s cut with sound:
+
+https://github.com/user-attachments/assets/77c1e98a-fc47-4719-a5fa-658c552dec20
 
 This cut was built and rendered in After Effects from [`examples/demo/edit.json`](examples/demo/edit.json).
 The footage is placeholder gradients made by `make_media.py`. Everything on top of it came from
