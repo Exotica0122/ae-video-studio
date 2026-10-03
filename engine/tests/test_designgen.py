@@ -155,7 +155,7 @@ class StyleFrameDurationTest(unittest.TestCase):
 
 
 class FontPairingsTest(unittest.TestCase):
-    """docs/design.md gate 2 asks for 2-3 typefaces per direction, not one."""
+    """docs/design.md's design gate asks for 2-3 typefaces per direction, not one."""
 
     def test_each_direction_is_offered_with_more_than_one_typeface(self):
         drafts = designgen.propose(["warm", "hopeful"], log=None, limit=2, pairings=2)

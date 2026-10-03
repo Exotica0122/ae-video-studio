@@ -15,6 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from .audiopost import AudioPostError, parse_loudness
+from . import taste as tastelib
 from .media import MediaError, probe
 
 TARGET_LUFS = -16.0
@@ -23,6 +24,8 @@ LOUDNESS_TOLERANCE = 1.5     # a section this far off target is worth a note
 MUSIC_HEADROOM_DB = 6.0      # music should sit at least this far under the voice that follows
 PRE_VOICE_WINDOW = 0.30      # docs/design.md §8: music must be down before the voice starts
 WCAG_AA = 4.5
+TASTE_PALETTE_MAX = 0.18     # mean swatch distance (0-1) past which the render has left the refs' colours
+TASTE_SLACK = {"luma": 0.08, "contrast": 0.08, "warmth": 0.05, "saturation": 0.08}
 
 
 class QAError(RuntimeError):
@@ -323,6 +326,34 @@ def legibility(design, minimum: float = WCAG_AA) -> list:
         status = "ok" if ratio >= minimum else "warn"
         findings.append(Finding(f"contrast:{text}-on-{ground}", status,
                                 f"{ratio}:1" + ("" if status == "ok" else f" is under the {minimum}:1 minimum")))
+    return findings
+
+
+# ---------------------------------------------------------------- taste
+
+def taste_check(stills: list, taste: dict) -> list:
+    """How far the render's stills sit from the approved references' measured targets."""
+    goal = (taste or {}).get("targets") or {}
+    if not goal or not stills:
+        return []
+    measured = [tastelib.measure(s) for s in stills]
+    swatches = [sw for m in measured for sw in m["palette"]]
+    findings = []
+    near = tastelib.palette_distance(swatches, goal["palette"])
+    findings.append(Finding("taste:palette", "ok" if near <= TASTE_PALETTE_MAX else "warn",
+                            f"distance {near:.3f} from the references' palette (warn above {TASTE_PALETTE_MAX})"))
+    for key, slack in TASTE_SLACK.items():
+        value = round(sum(m[key] for m in measured) / len(measured), 3)
+        lo, hi = goal[key]["min"] - slack, goal[key]["max"] + slack
+        off = round(lo - value if value < lo else value - hi if value > hi else 0.0, 3)
+        findings.append(Finding(f"taste:{key}", "warn" if off else "ok",
+                                f"{value} vs references {goal[key]['min']}–{goal[key]['max']}"
+                                + (f", {off} outside" if off else "")))
+    avoid = goal.get("avoid")
+    if avoid:
+        far = tastelib.palette_distance(swatches, avoid["palette"])
+        findings.append(Finding("taste:avoid", "warn" if far < near else "ok",
+                                f"palette distance {far:.3f} from the avoid refs, {near:.3f} from the wanted ones"))
     return findings
 
 

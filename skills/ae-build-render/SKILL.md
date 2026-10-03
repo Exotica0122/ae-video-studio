@@ -32,7 +32,7 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
 
 - One bridge job at a time. If a command reports the bridge is busy, wait; never submit in parallel.
 - Read the build report. It is not done unless `ok` is true: fix `expressionErrors`, `missingFonts` or `error` first.
-- Show stills to the user before any long render (docs/design.md gates 4–5).
+- Show stills to the user before any long render (docs/design.md gates 5–6).
 - Renders always use `render` (aerender) with After Effects closed. Never script `renderQueue.render()` for long renders: it locks the After Effects UI and can freeze it.
 - Tell the user before closing After Effects. A forced quit looks like a crash to them.
 - `render` defaults to the "High Quality" output template (ProRes 422 on After Effects 2026). Make H.264 delivery copies from the master with ffmpeg.

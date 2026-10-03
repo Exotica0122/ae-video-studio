@@ -3,10 +3,24 @@ name: design-system
 description: Propose 2-3 design directions for an ae-video-studio video from its own footage, show them as clickable browser mockups with font pairings, record the choice as plan/design.json, and confirm it with a real After Effects still. Use at the design checkpoint, before any build, or when the user asks to see design or font options.
 ---
 
-# Design directions (gate 2)
+# Design directions (gate 3)
 
 Run commands with `PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/engine python3 -m aestudio …`.
-Needs `analysis/footage.json` from the `footage-logging` skill.
+Needs `analysis/footage.json` from the `footage-logging` skill, and reads `plan/taste.json` from the
+`taste` gate when there is one.
+
+## Start from the references
+
+Before proposing, read `plan/taste.json` and open the `want` references again. `design-propose` picks
+it up automatically from beside `--analysis` (or take `--taste <file>`): approved `mood:` traits rank
+directions like brief moods, the references' brightness breaks ties between dark and light directions,
+the accent comes from the references' palette, and each draft cites the refs it draws on (`refs` in the
+output, "draws on ref-01" on its card). Tell the user which reference each direction answers.
+Without a taste file nothing changes.
+
+The engine only biases palette and ranking. Type, layout and motion traits (`type: …`, `layout: …`,
+`motion: …`) are yours to honour: pick pairings, `--lines` and the style frame to match them, and
+never offer a direction that matches a `rejected_traits` entry.
 
 ## The flow
 

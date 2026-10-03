@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-FOLDERS = ("plan", "analysis", "analysis/transcripts", "analysis/frames", "analysis/sheets",
+FOLDERS = ("plan", "refs", "analysis", "analysis/transcripts", "analysis/frames", "analysis/sheets",
            "preview", "build", "exports", "qa")
 
 DECISIONS = "plan/decisions.md"
@@ -17,12 +17,13 @@ DECISIONS = "plan/decisions.md"
 # gate number, label, and the artifact that proves it happened (see docs/design.md section 3)
 GATES = ((0, "brief", "plan/brief.md"),
          (1, "story", "plan/story.md"),
-         (2, "design", "plan/design.json"),
-         (3, "grade", "plan/grade.json"),
-         (4, "test clip", "plan/edit.json"),
-         (5, "key stills", None),
-         (6, "review render", None),
-         (7, "master", None))
+         (2, "taste", "plan/taste.json"),
+         (3, "design", "plan/design.json"),
+         (4, "grade", "plan/grade.json"),
+         (5, "test clip", "plan/edit.json"),
+         (6, "key stills", None),
+         (7, "review render", None),
+         (8, "master", None))
 
 
 class ProjectError(RuntimeError):
@@ -65,7 +66,7 @@ def init_project(root) -> list:
 
 
 def gates(root) -> list:
-    """Which gates have left evidence on disk. Gates 5-7 have no single artifact, so they are
+    """Which gates have left evidence on disk. Gates 6-8 have no single artifact, so they are
     read from the decision log instead of guessed from files in exports/."""
     root = Path(root).expanduser()
     recorded = _recorded_gates(root)
@@ -90,7 +91,10 @@ def _recorded_gates(root) -> set:
         text = (root / DECISIONS).read_text(encoding="utf-8")
     except OSError:
         return set()
-    return {int(n) for n in re.findall(r"^## Gate (\d+)", text, re.MULTILINE)}
+    # by label first: logs written before the taste gate existed number later gates one lower
+    numbers = {label: n for n, label, _ in GATES}
+    return {numbers.get(label, int(n))
+            for n, label in re.findall(r"^## Gate (\d+)(?: — (.+?) \(\d{4}-\d\d-\d\d\))?", text, re.MULTILINE)}
 
 
 def record_decision(root, gate: int, what: str, detail: str = "", today=None) -> Path:

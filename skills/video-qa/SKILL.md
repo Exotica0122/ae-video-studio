@@ -8,7 +8,7 @@ description: Check a rendered ae-video-studio export with measurements rather th
 ```
 PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/engine python3 -m aestudio qa <export.mov> \
     [--plan plan/edit.json] [--design plan/design.json] [--sections sections.json] \
-    [--out qa] [--stills 8.4,21.0,58.2] [--share exports/share-1080p.mp4]
+    [--out qa] [--stills 8.4,21.0,58.2] [--share exports/share-1080p.mp4] [--taste plan/taste.json]
 ```
 
 Writes the next `qa/report-vNN.md` and exits 1 if anything failed. Run it as a **subagent that did not
@@ -25,6 +25,11 @@ build the video** — the point is a reader who has no stake in the render being
 | `music-before-voice` | **The bed must already be down before a voice starts, not duck as it starts.** Compares the bed in the 0.3 s before each voice against the bed at full level in a voice-free window. |
 | `sfx:<role>` | An SFX that is in the edit plan but inaudible in the mix. |
 | `contrast:<a>-on-<b>` | A generated palette that came out pretty and unreadable (WCAG AA, 4.5:1). |
+| `taste:palette`, `taste:luma`, `taste:contrast`, `taste:warmth`, `taste:saturation` | A render that drifted from the approved references. Measured on the stills (20/50/80 % if `--stills` is not given). |
+| `taste:avoid` | Stills whose palette sits closer to the avoid refs than to the wanted ones. |
+
+Pass `--taste` whenever the project has a `plan/taste.json`. Then open the stills beside the
+references in `refs/` and check the `approved_traits` the numbers cannot see — type, layout, motion.
 
 ## Rules
 
