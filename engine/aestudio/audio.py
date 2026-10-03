@@ -38,3 +38,28 @@ def sfx_fade_keys(at, gain_db, onsets):
         return None
     on = later[0]
     return [[_num(on - 1.0), _num(gain_db)], [_num(on - 0.1), _num(gain_db - 17)]]
+
+
+def level_at(keys, t):
+    """The level a keyframe curve holds at time t, interpolated linearly as After Effects does."""
+    if t <= keys[0][0]:
+        return keys[0][1]
+    for (t0, d0), (t1, d1) in zip(keys, keys[1:]):
+        if t <= t1:
+            return d0 if t1 == t0 else d0 + (d1 - d0) * (t - t0) / (t1 - t0)
+    return keys[-1][1]
+
+
+def segment_keys(keys, start, end, fade_in=0.0, fade_out=0.0, floor=-40.0):
+    """Cut a duck curve to one music segment, fading up from and down to the floor at its edges."""
+    a, b = start + fade_in, end - fade_out
+    out = [(start, floor)] if fade_in > 0 else []
+    out.append((a, level_at(keys, a)))
+    out += [(t, db) for t, db in keys if a < t < b]
+    out.append((b, level_at(keys, b)))
+    if fade_out > 0:
+        out.append((end, floor))
+    merged = {}
+    for t, db in out:
+        merged[round(t, 3)] = db
+    return [[_num(t), _num(db)] for t, db in sorted(merged.items())]

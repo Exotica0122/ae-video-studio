@@ -73,6 +73,11 @@ class Music:
     # but sound carried by a GRAPHIC - a clip inside a layout panel - is invisible
     # to the compiler, so the plan names those spans here or the bed never dips.
     spans: list = field(default_factory=list)
+    # A segment of a multi-track bed: timeline end (None runs to the end), source offset and edge fades.
+    src_in: float = 0.0
+    end: float | None = None
+    fade_in: float = 0.0
+    fade_out: float = 0.0
 
 
 @dataclass
@@ -83,7 +88,7 @@ class Plan:
     voices: list
     shots: list
     sfx: list
-    music: Music | None
+    music: list
     graphics: list
     grade: dict
     fade_out: float
@@ -114,6 +119,21 @@ class _Checker:
         if self.check_files and not p.exists():
             self.errors.append(f"{where}: file not found: {p}")
         return p
+
+
+def _music(c: _Checker, m: dict, where: str, duration: float) -> Music:
+    music = Music(c.path(m, "file", where), c.num(m, "gain_db", where, 0.0, None), c.num(m, "start", where, 0.0),
+                  dict(m.get("duck", {})), [tuple(sp) for sp in m.get("spans", [])],
+                  c.num(m, "src_in", where, 0.0), None if m.get("end") is None else c.num(m, "end", where),
+                  c.num(m, "fade_in", where, 0.0), c.num(m, "fade_out", where, 0.0))
+    end = duration if music.end is None else music.end
+    if music.end is not None and music.end <= music.start:
+        c.errors.append(f"{where}: 'end' must be greater than 'start'")
+    elif duration > 0 and music.end is not None and music.end > duration:
+        c.errors.append(f"{where}: 'end' is past the end of the video ({duration:g}s)")
+    elif music.fade_in + music.fade_out > end - music.start:
+        c.errors.append(f"{where}: fade_in + fade_out is longer than the segment")
+    return music
 
 
 def load_plan(path, check_files: bool = True) -> Plan:
@@ -194,10 +214,19 @@ def load_plan(path, check_files: bool = True) -> Plan:
                bool(s.get("fade_before_voice", False))) for i, s in enumerate(data.get("sfx", []))]
 
     m = data.get("music")
-    music = None
-    if m is not None:
-        music = Music(c.path(m, "file", "music"), c.num(m, "gain_db", "music", 0.0, None), c.num(m, "start", "music", 0.0),
-                      dict(m.get("duck", {})), [tuple(sp) for sp in m.get("spans", [])])
+    music = []
+    if isinstance(m, dict):
+        music = [_music(c, m, "music", duration)]
+    elif isinstance(m, list):
+        if not m:
+            c.errors.append("music: a list of segments must not be empty")
+        for i, seg in enumerate(m):
+            if isinstance(seg, dict):
+                music.append(_music(c, seg, f"music[{i}]", duration))
+            else:
+                c.errors.append(f"music[{i}]: must be an object")
+    elif m is not None:
+        c.errors.append("music: must be an object or a list of segments")
 
     graphics = []
     for i, g in enumerate(data.get("graphics", [])):

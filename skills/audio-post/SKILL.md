@@ -20,6 +20,21 @@ The spec lists the takes in the order they are heard:
  "duration": 75.0}
 ```
 
+### Two or more music tracks
+
+`music` may also be a list of segments, one per track, each placed on the timeline. Track A from the
+start to a line of narration, then track B overlapping it for the handoff:
+
+```json
+"music": [{"file": "music/a.mp3", "end": 55.5, "fade_out": 1.5},
+          {"file": "music/b.mp3", "start": 54.0, "src_in": 3.2, "fade_in": 1.5, "gain_db": -2}]
+```
+
+`start`/`end` are timeline seconds (`end` defaults to the end of the video), `src_in` is where to start
+in the file. Every segment ducks under the same voices, with its fades laid over the duck curve. A
+segment is never looped, so audio-post refuses one whose file is too short. Mix nothing by hand into
+one wav: the segments stay editable.
+
 `--merge` splices `voices` and `music` into an existing `plan/edit.json` and touches nothing else —
 shots and graphics belong to the story gate, so re-running this never rewrites an approved timeline.
 

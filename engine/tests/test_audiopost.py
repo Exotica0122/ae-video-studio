@@ -4,6 +4,7 @@ The parser tests use output captured from a real ffmpeg run, so they stay honest
 shape ffmpeg actually emits rather than the shape it would be convenient for it to emit.
 """
 import unittest
+from unittest import mock
 
 from aestudio import audiopost as ap
 
@@ -169,6 +170,21 @@ class MergeTest(unittest.TestCase):
         plan = {"voices": [{"id": "old"}]}
         ap.merge_into(plan, {"voices": [{"id": "N1"}]})
         self.assertEqual(plan["voices"], [{"id": "old"}])
+
+
+class MusicSegmentTest(unittest.TestCase):
+    def test_a_segment_keeps_its_placement_and_gets_a_gain(self):
+        with mock.patch.object(ap, "measure", return_value=_measured(lufs=-14.0, peak=-1.0, duration=60.0)):
+            seg = ap.music_segment({"file": "b.wav", "start": 54, "src_in": 3, "fade_in": 2}, "/p", 90.0)
+        self.assertEqual({k: seg[k] for k in ("file", "start", "src_in", "fade_in")},
+                         {"file": "b.wav", "start": 54, "src_in": 3, "fade_in": 2})
+        self.assertEqual(seg["gain_db"], -8.0)
+        self.assertNotIn("end", seg)
+
+    def test_a_segment_longer_than_its_source_is_refused(self):
+        with mock.patch.object(ap, "measure", return_value=_measured(duration=30.0)):
+            with self.assertRaisesRegex(ap.AudioPostError, "cannot cover 54–90s"):
+                ap.music_segment({"file": "b.wav", "start": 54, "src_in": 3}, "/p", 90.0)
 
 
 if __name__ == "__main__":
