@@ -3,6 +3,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .grade import GradeError, look_lumetri, lumetri_keys
+
 GRAPHIC_TYPES = ("title-page", "opening", "backdrop", "scrapbook", "caption", "quote", "lower-third", "end-card", "inset", "layout",
                  "block", "chips", "subtitle", "fade-in")
 
@@ -54,6 +56,8 @@ class Shot:
     # throws away most of a group; fitting the width keeps all of it and bands the
     # rest of the frame. None (the default) covers, which is right for 16:9.
     fit: str | None = None
+    # Lumetri overrides for this shot alone, by name or index
+    lumetri: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -103,6 +107,35 @@ def _scale_graphic(g, sx, sy):
         v = g.get(key)
         if isinstance(v, (int, float)) and v > 1:
             g[key] = round(v * sy, 3)
+
+
+def _lumetri(c, values, where):
+    if not isinstance(values, dict):
+        c.errors.append(f"{where}: 'lumetri' must be an object")
+        return {}
+    try:
+        return lumetri_keys(values)
+    except GradeError as e:
+        c.errors.append(f"{where}: {e}")
+        return {}
+
+
+def _grade(c, data):
+    """The plan grade with Lumetri keyed by index, the look from `grade.file` under its explicit values."""
+    grade = dict(data.get("grade", {}))
+    lum, offsets = {}, {}
+    if grade.get("file"):
+        gp = c.path(grade, "file", "grade")
+        try:
+            g = json.loads(gp.read_text(encoding="utf-8")) if gp else {}
+        except (OSError, json.JSONDecodeError) as e:
+            c.errors.append(f"grade: cannot read {gp}: {e}")
+            g = {}
+        lum = look_lumetri(g.get("look") or {})
+        offsets = dict((g.get("match") or {}).get("offsets") or {})
+    lum.update(_lumetri(c, grade.get("lumetri", {}), "grade"))
+    grade["lumetri"] = lum
+    return grade, offsets
 
 
 class _Checker:
@@ -174,11 +207,16 @@ def load_plan(path, check_files: bool = True) -> Plan:
                             c.num(v, "gain_db", where, 0.0, None), c.num(v, "src_in", where, 0.0),
                             None if src_out is None else c.num(v, "src_out", where)))
 
+    grade, offsets = _grade(c, data)
     shots = []
     for i, s in enumerate(data.get("shots", [])):
         where = f"shots[{i}]"
-        shot = Shot(c.path(s, "clip", where), c.num(s, "in", where), c.num(s, "out", where),
-                    c.num(s, "src_in", where, 0.0), c.num(s, "exposure", where, 0.0, None), c.num(s, "zoom", where, 1.0))
+        clip = c.path(s, "clip", where)
+        exposure = offsets.get(clip.name, 0.0) if clip and "exposure" not in s else c.num(s, "exposure", where, 0.0, None)
+        shot = Shot(clip, c.num(s, "in", where), c.num(s, "out", where),
+                    c.num(s, "src_in", where, 0.0), float(exposure), c.num(s, "zoom", where, 1.0))
+        if s.get("lumetri") is not None:
+            shot.lumetri = _lumetri(c, s["lumetri"], where)
         ft = s.get("fit")
         if ft is not None:
             if ft not in ("width",):
@@ -299,5 +337,5 @@ def load_plan(path, check_files: bool = True) -> Plan:
     project = (path.parent / project).resolve() if project else None
     if c.errors:
         raise PlanError(f"{path}:\n  " + "\n  ".join(c.errors))
-    return Plan(name, path.parent, fmt, voices, shots, sfx, music, graphics, dict(data.get("grade", {})),
+    return Plan(name, path.parent, fmt, voices, shots, sfx, music, graphics, grade,
                 float(data.get("fade_out", 0.75)), project, design_size)

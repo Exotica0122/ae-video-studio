@@ -2,6 +2,7 @@
 from .audio import duck_keys, sfx_fade_keys
 from .components import DEFAULTS, REGISTRY
 from .context import Context
+from .grade import LUMETRI
 from .ops import Ops, validate_ops
 from .timing import check_fresh, load_transcript, voice_times
 from .util import r3
@@ -65,9 +66,10 @@ def compile_plan(plan, design) -> list:
 
     for i, s in enumerate(plan.shots):
         dis = r3(s.dissolve if s.dissolve is not None else default_dis)
-        lum = dict(base_grade)
+        lum = {**base_grade, **s.lumetri}
         if s.exposure:
-            lum["20"] = r3(float(lum.get("20", 0)) + s.exposure)
+            ev = LUMETRI["exposure"]
+            lum[ev] = r3(float(lum.get(ev, 0)) + s.exposure)
         expr = _motion_exprs(s, f.width, f.height) or {}
         end = r3(s.end)
         # a shot only holds past its out point if the NEXT one dissolves over it

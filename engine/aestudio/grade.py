@@ -16,6 +16,9 @@ from .styleframe import PAGE_JS
 LOOKS = Path(__file__).resolve().parents[2] / "designs" / "looks.json"
 MAX_MATCH_STOPS = 0.75       # beyond this it is a relight, not a match — flag it instead
 SHOTS_IN_PREVIEW = 4
+# Lumetri Color property indices, verified in After Effects
+LUMETRI = {"temperature": "15", "tint": "16", "saturation": "17", "exposure": "20",
+           "contrast": "21", "highlights": "22", "shadows": "23"}
 
 
 class GradeError(RuntimeError):
@@ -54,6 +57,29 @@ def load_looks(path=LOOKS) -> list:
                           mood=list(entry.get("mood", [])), note=entry.get("note", ""),
                           preview=entry.get("preview", "null"), ae=dict(entry["ae"])))
     return looks
+
+
+def lumetri_keys(values: dict) -> dict:
+    """Lumetri values keyed by name ("contrast") or index ("21") -> keyed by index."""
+    out = {}
+    for key, value in values.items():
+        key = str(key)
+        if not key.isdigit():
+            if key.lower() not in LUMETRI:
+                raise GradeError(f"unknown Lumetri parameter '{key}' (expected an index or one of {', '.join(LUMETRI)})")
+            key = LUMETRI[key.lower()]
+        out[key] = value
+    return out
+
+
+def look_lumetri(look: dict) -> dict:
+    """A grade.json look as Lumetri values. Its saturation is an offset; Lumetri's is absolute with 100 unchanged."""
+    out = {}
+    for name, index in LUMETRI.items():
+        value = float(look.get(name, 0) or 0) + (100 if name == "saturation" else 0)
+        if value or name == "saturation":
+            out[index] = round(value, 3)
+    return out
 
 
 def looks_for(moods, catalogue=None, limit: int = 3) -> list:

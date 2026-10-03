@@ -30,6 +30,12 @@ a look is judged on the hard shots and not only on the flattering one. `plan/gra
 neutral parameters (exposure, contrast, temperature, tint, saturation, shadows, highlights) that the
 builder applies for real in After Effects.
 
+Point the edit plan at it with `"grade": {"file": "grade.json"}`: the look becomes every shot's base
+Lumetri and each shot without its own `exposure` takes its matching offset. Lumetri values in the plan
+(`grade.lumetri`, a shot's `lumetri`) may be keyed by name — `temperature`, `tint`, `saturation`,
+`exposure`, `contrast`, `highlights`, `shadows` — or by index (`"21"`), and override the look. In grade.json
+`saturation` is an offset (`-10`); in `lumetri` it is Lumetri's own value (`90`, where 100 is unchanged).
+
 ## Rules
 
 - Always keep a `neutral` option on the page. "Do nothing" is a legitimate choice and the user should
