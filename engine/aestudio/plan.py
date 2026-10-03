@@ -3,7 +3,10 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-GRAPHIC_TYPES = ("title-page", "opening", "backdrop", "scrapbook", "caption", "quote", "lower-third", "end-card", "inset", "layout")
+from .grade import GradeError, look_lumetri, lumetri_keys
+
+GRAPHIC_TYPES = ("title-page", "opening", "backdrop", "scrapbook", "caption", "quote", "lower-third", "end-card", "inset", "layout",
+                 "block", "chips", "subtitle", "fade-in")
 
 
 class PlanError(ValueError):
@@ -53,6 +56,8 @@ class Shot:
     # throws away most of a group; fitting the width keeps all of it and bands the
     # rest of the frame. None (the default) covers, which is right for 16:9.
     fit: str | None = None
+    # Lumetri overrides for this shot alone, by name or index
+    lumetri: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -93,6 +98,49 @@ class Plan:
     grade: dict
     fade_out: float
     project: Path | None
+    design_size: tuple | None = None
+
+
+def _scale_graphic(g, sx, sy):
+    """Comp-pixel fields only: fractions and 4K-basis design px already follow the format."""
+    for p in g.get("panels") or []:
+        if isinstance(p, dict):
+            for key, k in (("x", sx), ("w", sx), ("y", sy), ("h", sy)):
+                if isinstance(p.get(key), (int, float)):
+                    p[key] = round(p[key] * k, 3)
+    for key in ("bar_top", "bar_bottom"):
+        v = g.get(key)
+        if isinstance(v, (int, float)) and v > 1:
+            g[key] = round(v * sy, 3)
+
+
+def _lumetri(c, values, where):
+    if not isinstance(values, dict):
+        c.errors.append(f"{where}: 'lumetri' must be an object")
+        return {}
+    try:
+        return lumetri_keys(values)
+    except GradeError as e:
+        c.errors.append(f"{where}: {e}")
+        return {}
+
+
+def _grade(c, data):
+    """The plan grade with Lumetri keyed by index, the look from `grade.file` under its explicit values."""
+    grade = dict(data.get("grade", {}))
+    lum, offsets = {}, {}
+    if grade.get("file"):
+        gp = c.path(grade, "file", "grade")
+        try:
+            g = json.loads(gp.read_text(encoding="utf-8")) if gp else {}
+        except (OSError, json.JSONDecodeError) as e:
+            c.errors.append(f"grade: cannot read {gp}: {e}")
+            g = {}
+        lum = look_lumetri(g.get("look") or {})
+        offsets = dict((g.get("match") or {}).get("offsets") or {})
+    lum.update(_lumetri(c, grade.get("lumetri", {}), "grade"))
+    grade["lumetri"] = lum
+    return grade, offsets
 
 
 class _Checker:
@@ -156,6 +204,15 @@ def load_plan(path, check_files: bool = True) -> Plan:
     if fmt.duration <= 0:
         c.errors.append("format: 'duration' must be > 0")
 
+    design_size = data.get("design_size")
+    if design_size is not None:
+        if (not isinstance(design_size, list) or len(design_size) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in design_size)):
+            c.errors.append("'design_size' must be [width, height] in pixels")
+            design_size = None
+        else:
+            design_size = (float(design_size[0]), float(design_size[1]))
+
     voices, seen = [], set()
     for i, v in enumerate(data.get("voices", [])):
         where = f"voices[{i}]"
@@ -170,11 +227,16 @@ def load_plan(path, check_files: bool = True) -> Plan:
                             c.num(v, "gain_db", where, 0.0, None), c.num(v, "src_in", where, 0.0),
                             None if src_out is None else c.num(v, "src_out", where)))
 
+    grade, offsets = _grade(c, data)
     shots = []
     for i, s in enumerate(data.get("shots", [])):
         where = f"shots[{i}]"
-        shot = Shot(c.path(s, "clip", where), c.num(s, "in", where), c.num(s, "out", where),
-                    c.num(s, "src_in", where, 0.0), c.num(s, "exposure", where, 0.0, None), c.num(s, "zoom", where, 1.0))
+        clip = c.path(s, "clip", where)
+        exposure = offsets.get(clip.name, 0.0) if clip and "exposure" not in s else c.num(s, "exposure", where, 0.0, None)
+        shot = Shot(clip, c.num(s, "in", where), c.num(s, "out", where),
+                    c.num(s, "src_in", where, 0.0), float(exposure), c.num(s, "zoom", where, 1.0))
+        if s.get("lumetri") is not None:
+            shot.lumetri = _lumetri(c, s["lumetri"], where)
         ft = s.get("fit")
         if ft is not None:
             if ft not in ("width",):
@@ -235,13 +297,23 @@ def load_plan(path, check_files: bool = True) -> Plan:
         gtype = g.get("type")
         if gtype not in GRAPHIC_TYPES:
             c.errors.append(f"{where}: unknown type '{gtype}' (expected one of {', '.join(GRAPHIC_TYPES)})")
-        if gtype in ("caption", "quote"):
+        if gtype in ("caption", "quote", "block", "subtitle"):
             voice = g.get("voice")
             if voice is None:
                 if g.get("in") is None or g.get("out") is None:
-                    c.errors.append(f"{where}: a caption without a voice needs 'in' and 'out'")
+                    c.errors.append(f"{where}: a {gtype} without a voice needs 'in' and 'out'")
             elif voice not in seen:
                 c.errors.append(f"{where}: unknown voice '{voice}'")
+        if gtype in ("chips", "fade-in") and (g.get("in") is None or g.get("out") is None):
+            c.errors.append(f"{where}: a {gtype} needs 'in' and 'out'")
+        if gtype == "chips" and not (g.get("chips") or g).get("words"):
+            c.errors.append(f"{where}: 'words' must be a non-empty list")
+        if gtype == "subtitle" and not g.get("lines"):
+            c.errors.append(f"{where}: 'lines' must be a non-empty list")
+        if gtype == "block":
+            b = g.get("block") or g
+            if not isinstance(b.get("x"), (int, float)) or not isinstance(b.get("y"), (int, float)):
+                c.errors.append(f"{where}: a block needs 'x' and 'y' (fractions of the frame)")
         # Any graphic may carry a backing photo - end cards, and title pages that
         # set their type over footage - so resolve it wherever it appears.
         if isinstance(g.get("photo"), dict):
@@ -286,11 +358,13 @@ def load_plan(path, check_files: bool = True) -> Plan:
                         continue
                     p = c.path(it, "clip", f"{where}.items[{j}]")
                     it["clip"] = str(p) if p else None
+        if design_size:
+            _scale_graphic(g, fmt.width / design_size[0], fmt.height / design_size[1])
         graphics.append(g)
 
     project = data.get("project")
     project = (path.parent / project).resolve() if project else None
     if c.errors:
         raise PlanError(f"{path}:\n  " + "\n  ".join(c.errors))
-    return Plan(name, path.parent, fmt, voices, shots, sfx, music, graphics, dict(data.get("grade", {})),
-                float(data.get("fade_out", 0.75)), project)
+    return Plan(name, path.parent, fmt, voices, shots, sfx, music, graphics, grade,
+                float(data.get("fade_out", 0.75)), project, design_size)
