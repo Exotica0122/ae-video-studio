@@ -43,6 +43,19 @@ Record every decision as it is made:
 decide --dir <project> --gate <n> --what "<what they chose>" [--detail "<why, or what to change>"]
 ```
 
+## Credits
+
+Log every downloaded or supplied file in `assets/CREDITS.md` as it enters the project, not at the end:
+
+```
+credits add <file> --dir <project> --url <item page> --author "<name (profile URL)>" --licence "<licence>" [--date YYYY-MM-DD] [--notes "..."]
+credits check --dir <project>     # media in plan/edit.json with no credit; exits 1 if any
+```
+
+The user sets the licence: read it off the item's own page and confirm it with them, never assume one.
+Put restrictions in `--notes` (e.g. "in-church screening only, not for upload"). Run `credits check`
+before gate 6 and again before delivering the master.
+
 ## Rules
 
 - **Never skip a gate because the change looks small.** After gate 6, a small tweak re-uses the same
