@@ -10,6 +10,7 @@ from pathlib import Path
 from .audiopost import AudioPostError, build as build_audio, merge_into
 from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
+from .lexicon import LexiconError, load_lexicon, scan as scan_lexicon
 from .credits import CreditsError, add as add_credit, check as check_credits
 from .deliver import DeliverError, deliver, parse_sizes
 from .components.layout import LayoutError
@@ -35,7 +36,7 @@ from .videoqa import (QAError, QAReport, decode_check, legibility, mix_loudness,
                       stills as qa_stills, stream_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (CreditsError, DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (LexiconError, CreditsError, DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -131,6 +132,12 @@ def cmd_credits_check(a):
     result = check_credits(a.dir, a.plan)
     print(json.dumps(result, ensure_ascii=False, indent=1))
     return 1 if result["missing"] else 0
+
+
+def cmd_lexicon_check(a):
+    hits = scan_lexicon(load_lexicon(a.lexicon), a.scripts)
+    print(json.dumps({"lexicon": a.lexicon, "scripts": len(a.scripts), "hits": hits}, ensure_ascii=False, indent=1))
+    return 0
 
 
 def cmd_log_footage(a):
@@ -471,6 +478,10 @@ def parser():
     cc.add_argument("--dir", default=".", help="the project folder")
     cc.add_argument("--plan", help="default: <dir>/plan/edit.json")
     cc.set_defaults(fn=cmd_credits_check)
+    lx = sub.add_parser("lexicon-check", help="script lines with words the AI voice mispronounces")
+    lx.add_argument("scripts", nargs="+", help="narration scripts (.md/.txt)")
+    lx.add_argument("--lexicon", default="plan/lexicon.json")
+    lx.set_defaults(fn=cmd_lexicon_check)
     lf = sub.add_parser("log-footage")
     lf.add_argument("sources", nargs="+")
     lf.add_argument("--out", required=True)

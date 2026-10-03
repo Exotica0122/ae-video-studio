@@ -59,3 +59,19 @@ shots and graphics belong to the story gate, so re-running this never rewrites a
 - The output records `speech` spans per take. Captions sync to words from the transcript, not to these,
   but the spans are what the music ducking is keyed from.
 - Re-run freely: it only ever rewrites `voices` and `music`.
+
+## Pronunciation lexicon (AI narration)
+
+Before generating speech, check the script against `plan/lexicon.json`, the words this voice gets wrong:
+
+```json
+[{"text": "성과 가정", "say": "성꽈 가정",
+  "note": "read as 성과 [result], not [성꽈]; reword, e.g. '성 정체성과 가정'"}]
+```
+
+```
+lexicon-check plan/narration.md [more scripts] [--lexicon plan/lexicon.json]
+```
+
+It lists every line containing an entry. Re-spell it as `say` or reword the line, then generate. When
+the user hears a new mispronunciation, add it to the lexicon so the next script is checked for it too.
