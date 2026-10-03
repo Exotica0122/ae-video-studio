@@ -53,5 +53,8 @@ decide --dir <project> --gate <n> --what "<what they chose>" [--detail "<why, or
 - Look at the contact sheets before proposing a story. Do not describe footage you have not seen.
 - When the user changes their mind, `decide` again for the same gate — the log keeps both, and that
   history is how you avoid re-litigating a settled choice.
+- After any change to `plan/edit.json`, run `validate` and clear its timing-lint warnings before building
+  (see `ae-build-render`). Flash frames and captions that leave early are cheap to fix in the plan and
+  expensive to find in a render.
 - After Effects runs **one job at a time**. Before any build, render or `--ping`, check nothing else is
   using it — including another Claude session.
