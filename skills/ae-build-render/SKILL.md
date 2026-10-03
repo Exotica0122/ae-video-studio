@@ -18,6 +18,12 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
    - a comp with the build's name exists outside the `ae-video-studio` build folder: refused (rename it or the plan). Only the comp, solids and nulls inside the build folder are replaced.
 3. Premiere Pro is closed. Busy Premiere and After Effects can freeze each other.
 4. `python3 -m aestudio validate plan/edit.json --design <design>` passes, and every font it lists is installed.
+5. Run `validate` before **every** build, not only the first. Its timing lint prints `warning:` lines to stderr and
+   a `lint` list in its JSON: `flash` (a shot visible under 0.5 s, e.g. a full-frame layout ending before the
+   shot under it does), `overlap` (two texts in one screen region at once), `read-time` (text off before it can be
+   read) and `leaves-early` (a caption gone before its voice finishes). Fix each, or tell the user why it stays.
+   `--strict` exits 1 on any warning; `--min-flash <s>` changes the flash threshold. A graphic that hides the
+   footage but is not known to can say `"opaque": true` (or `false` to opt out).
 
 ## Commands
 

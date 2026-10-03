@@ -18,6 +18,7 @@ from .grade import (GradeError, exposure_offsets, grade_plan, load_looks, looks_
                      render_look_previews, save_grade)
 from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
+from .lint import MIN_FRAGMENT, lint
 from .util import next_free
 from .media import MediaError, probe
 from .ops import OpsError
@@ -62,9 +63,13 @@ def _report_ok(result) -> bool:
 
 def cmd_validate(a):
     plan, design = load_plan(a.plan), load_design(a.design)
+    findings = lint(plan, design, min_fragment=a.min_flash)
+    for f in findings:
+        print(f"warning: {f}", file=sys.stderr)
     print(json.dumps({"name": plan.name, "duration": plan.format.duration, "shots": len(plan.shots), "voices": len(plan.voices),
-                      "graphics": len(plan.graphics), "design": design.id, "fonts": sorted(design.fonts())}, ensure_ascii=False))
-    return 0
+                      "graphics": len(plan.graphics), "design": design.id, "fonts": sorted(design.fonts()),
+                      "lint": [f.to_dict() for f in findings]}, ensure_ascii=False))
+    return 1 if a.strict and findings else 0
 
 
 def cmd_compile(a):
@@ -392,6 +397,8 @@ def parser():
     v = sub.add_parser("validate")
     v.add_argument("plan")
     v.add_argument("--design", required=True)
+    v.add_argument("--strict", action="store_true", help="exit 1 if the timing lint finds anything")
+    v.add_argument("--min-flash", type=float, default=MIN_FRAGMENT, help="shortest visible shot fragment, in seconds")
     v.set_defaults(fn=cmd_validate)
     for name, fn in (("compile", cmd_compile), ("build", cmd_build)):
         c = sub.add_parser(name)
