@@ -564,7 +564,7 @@ def _ref_card(ref: dict, approved: set, rejected: set) -> str:
     tags = "".join(f'<img src="{e(Path(p).name)}" alt="">' for p in images)
     media = f'<div class="frames">{tags}</div>' if len(images) > 1 else tags
     stats = ref.get("stats") or {}
-    swatches = "".join(f'<span title="{e(s["hex"])}" style="background:{e(s["hex"])};flex:{s["weight"]}"></span>'
+    swatches = "".join(f'<span title="{e(s["hex"])}" style="background:{e(s["hex"])};flex:{float(s["weight"]):g}"></span>'
                        for s in stats.get("palette", []))
     numbers = (f'luma {stats["luma"]:.2f} · contrast {stats["contrast"]:.2f} · warmth {stats["warmth"]:+.2f} · '
                f'saturation {stats["saturation"]:.2f}' if stats else "not measured")
