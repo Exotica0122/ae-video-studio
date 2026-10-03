@@ -11,8 +11,11 @@ FADE_OVERHEAD = 0.6
 OVERLAP_TOLERANCE = 0.1
 EPS = 1e-3
 
-TEXT_TYPES = ("caption", "quote", "lower-third", "title-page")
-OVERLAP_TYPES = ("caption", "quote", "lower-third")
+TEXT_TYPES = ("caption", "quote", "lower-third", "title-page", "block", "chips", "subtitle")
+OVERLAP_TYPES = ("caption", "quote", "lower-third", "block", "chips", "subtitle")
+# a caption carrying one of these keys renders as that graphic (components/blocks.py LEGACY)
+LEGACY_KIND = {"black_in": "fade-in", "sub": "subtitle", "block": "block", "chips": "chips"}
+POSITIONED = ("block", "chips", "subtitle")
 
 # (lead before onset, tail after offset) a voice-linked caption gets from its treatment
 CAPTION_PAD = {"line-fade": (0.4, 0.6), "paper-card": (0.3, 0.5), "editorial": (0.35, 0.55)}
@@ -147,6 +150,40 @@ def flash_frames(plan, design, voices, min_fragment=MIN_FRAGMENT):
     return findings
 
 
+def kind(g) -> str:
+    if g.get("type") in ("caption", "quote"):
+        for key, k in LEGACY_KIND.items():
+            if g.get(key):
+                return k
+    return g.get("type")
+
+
+def _body(g):
+    k = kind(g)
+    inner = g.get("sub" if k == "subtitle" else k)
+    return inner if isinstance(inner, dict) else g
+
+
+def _band(y):
+    return "top" if y < 0.4 else "center" if y < 0.65 else "bottom"
+
+
+def _positioned_region(g):
+    b, k = _body(g), kind(g)
+    if k == "block":
+        x = float(b.get("x", 0.5))
+        horiz = "right" if b.get("align") == "right" or x > 0.6 else "left" if x < 0.4 else "center"
+        return _band(float(b.get("y", 0.5))), horiz
+    cx = float(b.get("cx", 0.5))
+    return _band(float(b.get("y", 0.9))), "left" if cx < 0.4 else "right" if cx > 0.6 else "center"
+
+
+def _region_of(g, tr):
+    if kind(g) in POSITIONED:
+        return _positioned_region(g)
+    return _region(_place(g, g["type"], tr))
+
+
 def _place(g, gtype, tr):
     return FIXED_PLACE.get((gtype, tr)) or g.get("place") or DEFAULT_PLACE.get((gtype, tr), "lower-center")
 
@@ -159,19 +196,19 @@ def _region(place):
 
 
 def _label(g, i):
-    return f"graphics[{i}] {g.get('type')}"
+    return f"graphics[{i}] {kind(g)}"
 
 
 def text_overlap(plan, design, voices):
     items = [(i, g, tr, a, b) for i, (g, tr, a, b) in enumerate(_resolved(plan, design, voices))
-             if g.get("type") in OVERLAP_TYPES]
+             if kind(g) in OVERLAP_TYPES]
     findings = []
     for x, (i, g, tr, a, b) in enumerate(items):
-        ra = _region(_place(g, g["type"], tr))
+        ra = _region_of(g, tr)
         for j, h, tr2, c, d in items[x + 1:]:
             if _overlap((a, b), (c, d)) <= OVERLAP_TOLERANCE:
                 continue
-            rb = _region(_place(h, h["type"], tr2))
+            rb = _region_of(h, tr2)
             if ra[0] == rb[0] and (ra[1] == rb[1] or "center" in (ra[1], rb[1])):
                 findings.append(Finding("overlap", round(max(a, c), 3), round(min(b, d), 3),
                                         f"{_label(g, i)} and {_label(h, j)} share the {ra[0]} of the frame"))
@@ -186,7 +223,14 @@ def _segments(line):
 def graphic_text(g) -> str:
     if g.get("type") == "lower-third":
         return " ".join(str(g.get(k, "")) for k in ("name", "role"))
+    k, b = kind(g), _body(g)
+    if k == "chips":
+        return " ".join(str(w) for w in b.get("words", []))
     parts = ["".join(_segments(line)) for line in g.get("lines") or []]
+    if k == "block":
+        parts += [str(b.get("kicker", ""))]
+        parts += ["".join(_segments(line)) for it in b.get("items", []) for line in it.get("lines", [])]
+        parts += [f'{r.get("key", "")} {r.get("value", "")}' for r in b.get("rows", [])]
     if g.get("ref"):
         parts.append(str(g["ref"]))
     return " ".join(parts)
@@ -207,7 +251,7 @@ def read_seconds(text) -> float:
 def read_time(plan, design, voices):
     findings = []
     for i, (g, tr, a, b) in enumerate(_resolved(plan, design, voices)):
-        if g.get("type") not in TEXT_TYPES:
+        if kind(g) not in TEXT_TYPES:
             continue
         need = read_seconds(graphic_text(g))
         if b - a < need:

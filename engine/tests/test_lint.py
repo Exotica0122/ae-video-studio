@@ -112,6 +112,21 @@ class TextOverlapTest(unittest.TestCase):
         self.assertEqual(len(text_overlap(make_plan([], [caption(1, 5), lt]), self.design, {})), 1)
 
 
+    def test_positioned_blocks_in_opposite_corners_do_not_overlap(self):
+        left = caption(1, 5, block={"x": 0.06, "y": 0.2, "items": [{"lines": [["왼쪽"]]}]})
+        right = caption(3, 8, block={"x": 0.94, "y": 0.2, "align": "right", "items": [{"lines": [["오른쪽"]]}]})
+        self.assertEqual(text_overlap(make_plan([], [left, right]), self.design, {}), [])
+
+    def test_block_beside_a_default_caption_does_not_overlap(self):
+        top = {"type": "block", "in": 1, "out": 5, "x": 0.06, "y": 0.18, "items": [{"lines": [["위"]]}]}
+        self.assertEqual(text_overlap(make_plan([], [top, caption(3, 8)]), self.design, {}), [])
+
+    def test_subtitle_under_a_lower_caption_overlaps(self):
+        sub = caption(3, 8, sub={"y": 0.9})
+        [f] = text_overlap(make_plan([], [caption(1, 5), sub]), self.design, {})
+        self.assertIn("subtitle", f.message)
+
+
 class ReadTimeTest(unittest.TestCase):
     design = StubDesign({"caption": "line-fade"})
 
@@ -126,6 +141,19 @@ class ReadTimeTest(unittest.TestCase):
 
     def test_short_caption_with_time_is_fine(self):
         self.assertEqual(read_time(make_plan([], [caption(0, 3, "모든 여정은")]), self.design, {}), [])
+
+
+class BlockReadTimeTest(unittest.TestCase):
+    def test_block_reads_its_items_and_rows(self):
+        g = caption(0, 1, block={"x": 0.1, "y": 0.3, "kicker": "Hope",
+                                 "items": [{"lines": [["하지만 소망이 있습니다"]]}],
+                                 "rows": [{"key": "역사", "value": "하나님의 섭리로"}]})
+        [f] = read_time(make_plan([], [g]), StubDesign({"caption": "line-fade"}), {})
+        self.assertIn("block", f.message)
+
+    def test_fade_in_solid_is_not_text(self):
+        g = caption(0, 0.2, black_in=True)
+        self.assertEqual(read_time(make_plan([], [g]), StubDesign({"caption": "line-fade"}), {}), [])
 
 
 class LeavesBeforeVoiceTest(unittest.TestCase):
