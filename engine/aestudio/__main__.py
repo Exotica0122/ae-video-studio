@@ -4,11 +4,15 @@ import json
 import shutil
 import sys
 import time
+from datetime import date
 from pathlib import Path
 
 from .audiopost import AudioPostError, build as build_audio, merge_into
 from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
+from .lexicon import LexiconError, load_lexicon, scan as scan_lexicon
+from .credits import CreditsError, add as add_credit, check as check_credits
+from .deliver import DeliverError, deliver, parse_sizes
 from .components.layout import LayoutError
 from .design import DesignError, load_design
 from .doctor import DoctorError, format_report, run_checks
@@ -34,7 +38,7 @@ from .videoqa import (QAError, QAReport, decode_check, diff_findings, diff_secti
                       share_copy, stills as qa_stills, stream_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (LexiconError, CreditsError, DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -112,6 +116,33 @@ def cmd_still(a):
 
 def cmd_render(a):
     print(str(render(a.project, a.comp, a.out, rs=a.rs, om=a.om, allow_running_ae=a.allow_running_ae)))
+    return 0
+
+
+def cmd_deliver(a):
+    name = a.name or (Path(a.master).stem if a.master else a.comp)
+    result = deliver(a.out, name, parse_sizes(a.sizes), master=a.master, project=a.project, comp=a.comp,
+                     lufs=a.lufs, tp=a.tp, allow_running_ae=a.allow_running_ae)
+    print(json.dumps(result, ensure_ascii=False, indent=1))
+    return 0 if result["ok"] else 1
+
+
+def cmd_credits_add(a):
+    when = date.fromisoformat(a.date) if a.date else None
+    path = add_credit(a.dir, a.file, a.url, a.author, a.licence, a.notes, when)
+    print(json.dumps({"credits": str(path), "file": a.file}, ensure_ascii=False))
+    return 0
+
+
+def cmd_credits_check(a):
+    result = check_credits(a.dir, a.plan)
+    print(json.dumps(result, ensure_ascii=False, indent=1))
+    return 1 if result["missing"] else 0
+
+
+def cmd_lexicon_check(a):
+    hits = scan_lexicon(load_lexicon(a.lexicon), a.scripts)
+    print(json.dumps({"lexicon": a.lexicon, "scripts": len(a.scripts), "hits": hits}, ensure_ascii=False, indent=1))
     return 0
 
 
@@ -450,6 +481,35 @@ def parser():
     e.add_argument("--om", default="High Quality")
     e.add_argument("--allow-running-ae", action="store_true")
     e.set_defaults(fn=cmd_render)
+    dl = sub.add_parser("deliver", help="H.264 delivery copies of the master, loudness-normalised and verified")
+    dl.add_argument("--master", help="an existing ProRes master; otherwise render one from --project/--comp")
+    dl.add_argument("--project")
+    dl.add_argument("--comp")
+    dl.add_argument("--name", help="file name stem (default: the master's stem, or the comp name)")
+    dl.add_argument("--sizes", default="4k,1080", help="comma-separated: 4k, master, or a height such as 1080")
+    dl.add_argument("--out", default="exports/final")
+    dl.add_argument("--lufs", type=float, default=-16.0)
+    dl.add_argument("--tp", type=float, default=-2.0)
+    dl.add_argument("--allow-running-ae", action="store_true")
+    dl.set_defaults(fn=cmd_deliver)
+    cr = sub.add_parser("credits", help="maintain assets/CREDITS.md").add_subparsers(dest="credits_cmd", required=True)
+    ca = cr.add_parser("add", help="add or replace the credit for one file")
+    ca.add_argument("file", help="path relative to the project folder")
+    ca.add_argument("--dir", default=".", help="the project folder")
+    ca.add_argument("--url", required=True, help="the item's own page, not a search result")
+    ca.add_argument("--author", required=True)
+    ca.add_argument("--licence", required=True, help="as the user confirmed it, e.g. 'Pexels License'")
+    ca.add_argument("--date", help="download date, YYYY-MM-DD (default: today)")
+    ca.add_argument("--notes", default="")
+    ca.set_defaults(fn=cmd_credits_add)
+    cc = cr.add_parser("check", help="list media in the edit plan with no credit")
+    cc.add_argument("--dir", default=".", help="the project folder")
+    cc.add_argument("--plan", help="default: <dir>/plan/edit.json")
+    cc.set_defaults(fn=cmd_credits_check)
+    lx = sub.add_parser("lexicon-check", help="script lines with words the AI voice mispronounces")
+    lx.add_argument("scripts", nargs="+", help="narration scripts (.md/.txt)")
+    lx.add_argument("--lexicon", default="plan/lexicon.json")
+    lx.set_defaults(fn=cmd_lexicon_check)
     lf = sub.add_parser("log-footage")
     lf.add_argument("sources", nargs="+")
     lf.add_argument("--out", required=True)

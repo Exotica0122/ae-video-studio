@@ -33,6 +33,7 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
 | Only generate the script | `compile plan/edit.json --design <id> --project build/<name>.aep` then `run build/<NAME>.jsx` |
 | Review stills | `still --comp <NAME> --time <s> --out preview/<file>.png` (one per call) |
 | Review or master render | quit After Effects, then `render --project build/<name>.aep --comp <NAME> --out exports/<file>.mov` |
+| Final delivery | `deliver --master exports/<file>.mov --name <name> [--sizes 4k,1080] [--lufs -16] [--tp -2]` (or `--project … --comp …` to render the master first) |
 
 ## Rules
 
@@ -41,4 +42,5 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
 - Show stills to the user before any long render (docs/design.md gates 4–5).
 - Renders always use `render` (aerender) with After Effects closed. Never script `renderQueue.render()` for long renders: it locks the After Effects UI and can freeze it.
 - Tell the user before closing After Effects. A forced quit looks like a crash to them.
-- `render` defaults to the "High Quality" output template (ProRes 422 on After Effects 2026). Make H.264 delivery copies from the master with ffmpeg.
+- `render` defaults to the "High Quality" output template (ProRes 422 on After Effects 2026). Make H.264 delivery copies with `deliver`, not by hand.
+- `deliver` writes `exports/final/<name>-4k.mp4` and `<name>-1080p.mp4` (H.264, yuv420p, AAC 320k, faststart, audio through `loudnorm` + `alimiter`), first moving whatever was in `exports/final/` into `previous-vNN/`. It then measures each output's duration, size, loudness and true peak and exits 1 if any is off. Show the user the JSON summary; never hand over a file whose `ok` is false.
