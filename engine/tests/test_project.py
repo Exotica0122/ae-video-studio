@@ -13,7 +13,7 @@ class InitTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "video"
             created = init_project(root)
-            for name in ("plan", "analysis/transcripts", "analysis/frames", "analysis/sheets",
+            for name in ("plan", "refs", "analysis/transcripts", "analysis/frames", "analysis/sheets",
                          "preview", "build", "exports", "qa"):
                 self.assertTrue((root / name).is_dir(), name)
             self.assertIn(DECISIONS, created)
@@ -24,7 +24,7 @@ class InitTest(unittest.TestCase):
             root = Path(tmp) / "video"
             init_project(root)
             (root / "plan" / "design.json").write_text('{"approved": true}', encoding="utf-8")
-            record_decision(root, 2, "Paper Notebook · Paperlogy")
+            record_decision(root, 3, "Paper Notebook · Paperlogy")
             before = (root / DECISIONS).read_text(encoding="utf-8")
 
             self.assertEqual(init_project(root), [], "a second init must create nothing")
@@ -44,7 +44,7 @@ class GateTest(unittest.TestCase):
     def test_a_fresh_project_starts_at_gate_0_with_nothing_done(self):
         with tempfile.TemporaryDirectory() as tmp:
             init_project(tmp)
-            self.assertEqual([g.done for g in gates(tmp)], [False] * 8)
+            self.assertEqual([g.done for g in gates(tmp)], [False] * 9)
             self.assertEqual(next_gate(tmp).number, 0)
 
     def test_an_artifact_on_disk_marks_its_gate_done_and_moves_the_pointer(self):
@@ -54,7 +54,7 @@ class GateTest(unittest.TestCase):
             (Path(tmp) / "plan" / "story.md").write_text("story", encoding="utf-8")
             done = [g.number for g in gates(tmp) if g.done]
             self.assertEqual(done, [0, 1])
-            self.assertEqual(next_gate(tmp).number, 2)
+            self.assertEqual(next_gate(tmp).label, "taste")
 
     def test_a_logged_decision_without_its_artifact_reads_as_recorded_not_done(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,22 +68,37 @@ class GateTest(unittest.TestCase):
     def test_late_gates_have_no_artifact_so_the_log_is_their_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             init_project(tmp)
-            record_decision(tmp, 6, "Review render approved with two notes")
+            record_decision(tmp, 7, "Review render approved with two notes")
             by_number = {g.number: g for g in gates(tmp)}
-            self.assertTrue(by_number[6].done)
-            self.assertFalse(by_number[7].done)
+            self.assertTrue(by_number[7].done)
+            self.assertFalse(by_number[8].done)
+
+    def test_the_taste_gate_sits_between_story_and_design(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            labels = [g.label for g in gates(tmp)]
+            self.assertEqual(labels[1:4], ["story", "taste", "design"])
+            self.assertEqual(gates(tmp)[2].artifact, "plan/taste.json")
+
+    def test_a_log_from_before_the_taste_gate_is_read_by_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            init_project(tmp)
+            with (Path(tmp) / DECISIONS).open("a", encoding="utf-8") as fh:
+                fh.write("\n## Gate 6 — review render (2026-09-01)\n\nApproved.\n")
+            by_label = {g.label: g for g in gates(tmp)}
+            self.assertTrue(by_label["review render"].done)
+            self.assertFalse(by_label["key stills"].done)
 
 
 class DecisionTest(unittest.TestCase):
     def test_entries_append_newest_last_and_keep_the_earlier_one(self):
         with tempfile.TemporaryDirectory() as tmp:
             init_project(tmp)
-            record_decision(tmp, 2, "Paper Notebook", today=date(2026, 9, 21))
-            record_decision(tmp, 2, "Changed to Cinematic Minimal", today=date(2026, 9, 22))
+            record_decision(tmp, 3, "Paper Notebook", today=date(2026, 9, 21))
+            record_decision(tmp, 3, "Changed to Cinematic Minimal", today=date(2026, 9, 22))
             text = (Path(tmp) / DECISIONS).read_text(encoding="utf-8")
             self.assertLess(text.index("Paper Notebook"), text.index("Cinematic Minimal"),
                             "history of a changed mind must survive")
-            self.assertIn("## Gate 2 — design (2026-09-22)", text)
+            self.assertIn("## Gate 3 — design (2026-09-22)", text)
 
     def test_the_detail_is_written_under_the_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -95,7 +110,7 @@ class DecisionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             init_project(tmp)
             with self.assertRaises(ProjectError):
-                record_decision(tmp, 9, "nope")
+                record_decision(tmp, 10, "nope")
             with self.assertRaises(ProjectError):
                 record_decision(tmp, 1, "   ")
 

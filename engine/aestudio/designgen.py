@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import fonts as fontlib
+from . import taste as tastelib
 from .design import COMPONENTS, DesignError, PALETTE_KEYS, ROLES, load_design
 
 ARCHETYPES = Path(__file__).resolve().parents[2] / "designs" / "archetypes"
@@ -31,6 +32,7 @@ class Draft:
     recipe: dict
     fonts: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)
+    refs: list = field(default_factory=list)
 
 
 def load_archetypes(path=ARCHETYPES) -> list:
@@ -57,23 +59,44 @@ def load_archetypes(path=ARCHETYPES) -> list:
     return out
 
 
-def accent_from_footage(log, fallback=FALLBACK_ACCENT) -> str:
+def _accent(colors, fallback) -> str:
     best, best_score = None, -1.0
-    for clip in (log or {}).get("clips", []):
-        for frame in clip.get("frames", []):
-            for color in frame.get("colors", []):
-                if len(color) != 3:
-                    continue
-                r, g, b = (max(0, min(255, int(c))) / 255 for c in color)
-                h, l, s = colorsys.rgb_to_hls(r, g, b)
-                score = s * (1 - abs(l - 0.55) * 1.6)
-                if score > best_score:
-                    best, best_score = (r, g, b), score
+    for color in colors:
+        if len(color) != 3:
+            continue
+        r, g, b = (max(0, min(255, int(c))) / 255 for c in color)
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        score = s * (1 - abs(l - 0.55) * 1.6)
+        if score > best_score:
+            best, best_score = (r, g, b), score
     if not best or best_score <= 0:
         return fallback
     hue, _, saturation = colorsys.rgb_to_hls(*best)
     r, g, b = colorsys.hls_to_rgb(hue, 0.58, min(1.0, max(0.35, saturation)))
     return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def accent_from_footage(log, fallback=FALLBACK_ACCENT) -> str:
+    return _accent((color for clip in (log or {}).get("clips", []) for frame in clip.get("frames", [])
+                    for color in frame.get("colors", [])), fallback)
+
+
+def accent_from_taste(taste, fallback=FALLBACK_ACCENT) -> str:
+    return _accent((tastelib.rgb_of(s["hex"]) for s in ((taste or {}).get("targets") or {}).get("palette", [])),
+                   fallback)
+
+
+def _paper_luma(arch) -> float:
+    r, g, b = tastelib.rgb_of(arch["palette"]["paper"])
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+
+
+def _cite(recipe, taste, count: int = 2) -> list:
+    """The "want" refs whose palettes sit closest to this draft's palette."""
+    want = [r for r in (taste or {}).get("refs", []) if r.get("role") == "want" and r.get("stats")]
+    swatches = [{"hex": h, "weight": 1} for h in recipe["tokens"]["palette"].values()]
+    ranked = sorted(want, key=lambda r: (tastelib.palette_distance(swatches, r["stats"]["palette"]), r["id"]))
+    return [r["id"] for r in ranked[:count]]
 
 
 def _recipe(arch, pairing, accent) -> dict:
@@ -98,7 +121,7 @@ def _recipe(arch, pairing, accent) -> dict:
 
 
 def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archetypes=None, limit=3,
-            catalogue=None, dirs=None, pairings=2) -> list:
+            catalogue=None, dirs=None, pairings=2, taste=None) -> list:
     """Compose design drafts: `limit` directions, each offered with up to `pairings` typefaces.
 
     A font-layer failure is reported as a design failure: callers of this module catch
@@ -107,11 +130,17 @@ def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archety
 
     Each pairing becomes its own draft, because a draft already carries a unique id and its own
     Choose button — the preview page needs nothing new to offer a second typeface.
+
+    `taste` (plan/taste.json) biases ranking and accent towards the references; drafts cite the refs.
     """
     archetypes = archetypes or load_archetypes()
-    moods = [m.lower() for m in brief_moods or []]
-    ranked = sorted(archetypes, key=lambda a: (-len(set(moods) & {m.lower() for m in a.get("moods", [])}), a["id"]))
+    moods = [m.lower() for m in list(brief_moods or []) + tastelib.mood_words(taste)]
+    luma = (((taste or {}).get("targets") or {}).get("luma") or {}).get("mean")
+    ranked = sorted(archetypes, key=lambda a: (-len(set(moods) & {m.lower() for m in a.get("moods", [])}),
+                                               abs(_paper_luma(a) - luma) if luma is not None else 0, a["id"]))
     accent = accent_from_footage(log)
+    if luma is not None:
+        accent = accent_from_taste(taste, fallback=accent)
     drafts, directions = [], 0
     for arch in ranked:
         if directions >= limit:
@@ -130,9 +159,11 @@ def propose(brief_moods, log=None, scripts=("ko",), installed_only=True, archety
             if recipe["id"] in seen:
                 continue                      # two pairings sharing a headline font are one option
             seen.add(recipe["id"])
+            if taste and taste.get("refs"):
+                recipe["taste_refs"] = _cite(recipe, taste)
             drafts.append(Draft(id=recipe["id"], name=recipe["name"], mood=recipe["mood"], recipe=recipe,
                                 fonts={r: spec["font"] for r, spec in recipe["tokens"]["type"].items()},
-                                notes=list(pair["notes"])))
+                                notes=list(pair["notes"]), refs=list(recipe.get("taste_refs", []))))
     return drafts
 
 

@@ -108,12 +108,15 @@ def _draft_section(draft, frame_rel, lines) -> str:
                    for label, values in END_ROWS)
     notes = "".join(f'<li>{html.escape(n)}</li>' for n in draft.notes)
     fonts_used = ", ".join(dict.fromkeys(_family_of(spec) for spec in type_block.values()))
+    refs = draft.recipe.get("taste_refs")
+    cited = f'<p class="fonts">draws on {html.escape(", ".join(refs))}</p>' if refs else ""
     return f"""
 <section class="draft d-{html.escape(draft.id)}" data-id="{html.escape(draft.id)}">
   <header>
     <h2>{html.escape(draft.name)}</h2>
     <p class="mood">{html.escape(" · ".join(draft.mood[:5]))}</p>
     <p class="fonts">{html.escape(fonts_used)}</p>
+    {cited}
     {f'<ul class="notes">{notes}</ul>' if notes else ''}
   </header>
   <div class="frames">

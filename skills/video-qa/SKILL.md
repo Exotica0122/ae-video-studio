@@ -9,7 +9,7 @@ description: Check a rendered ae-video-studio export with measurements rather th
 PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/engine python3 -m aestudio qa <export.mov> \
     [--plan plan/edit.json] [--design plan/design.json] [--sections sections.json] \
     [--out qa] [--stills 8.4,21.0,58.2] [--share exports/share-1080p.mp4] \
-    [--diff exports/<previous-render>.mp4] [--no-people]
+    [--diff exports/<previous-render>.mp4] [--no-people] [--taste plan/taste.json]
 ```
 
 Writes the next `qa/report-vNN.md` and exits 1 if anything failed. Run it as a **subagent that did not
@@ -62,6 +62,11 @@ PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/engine python3 -m aestudio text-cover stills/*.
 Vision also reads text that is part of the footage, such as signs or shirts. Check the quoted
 words before you call it a graphics problem. The first run compiles the script, which takes a few
 seconds.
+| `taste:palette`, `taste:luma`, `taste:contrast`, `taste:warmth`, `taste:saturation` | A render that drifted from the approved references. Measured on the stills (20/50/80 % if `--stills` is not given). |
+| `taste:avoid` | Stills whose palette sits closer to the avoid refs than to the wanted ones. |
+
+Pass `--taste` whenever the project has a `plan/taste.json`. Then open the stills beside the
+references in `refs/` and check the `approved_traits` the numbers cannot see — type, layout, motion.
 
 ## Rules
 

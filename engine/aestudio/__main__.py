@@ -18,8 +18,8 @@ from .design import DesignError, load_design
 from .doctor import DoctorError, format_report, run_checks
 from .designgen import DesignGenError, Draft, propose, save_design, style_frame_plan
 from .footage import log_footage
-from .grade import (GradeError, exposure_offsets, grade_plan, load_looks, looks_for,
-                     render_look_previews, save_grade)
+from .grade import (GradeError, exposure_offsets, footage_stats, grade_plan, load_looks, look_from_dir,
+                     look_from_taste, looks_for, render_look_previews, save_grade)
 from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
 from .lint import MIN_FRAGMENT, lint
@@ -31,14 +31,16 @@ from .project import ProjectError, gates, init_project, next_gate, record_decisi
 from .preview import PreviewError, read_choice, serve, wait_for_choice
 from .render import RenderError, render
 from .styleframe import render_mockups
+from . import taste as tastelib
+from .taste import TasteError
 from .timing import TimingError
 from .textcover import text_over_people
 from .videoqa import (QAError, QAReport, decode_check, diff_findings, diff_section, legibility,
                       mix_loudness, music_before_voice, render_diff, section_loudness, sfx_audible,
-                      share_copy, stills as qa_stills, stream_check, write_report)
+                      share_copy, stills as qa_stills, stream_check, taste_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (LexiconError, CreditsError, DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (LexiconError, CreditsError, DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, TasteError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -229,12 +231,21 @@ def _pick(directory, draft_id):
     raise DesignGenError(f"draft '{wanted}' is not in {Path(directory) / 'drafts.json'}")
 
 
+def _taste(path, analysis=None):
+    """--taste, else <project>/plan/taste.json beside --analysis; None when there is none."""
+    if path:
+        return tastelib.load_taste(path)
+    return tastelib.approved_taste(Path(analysis).resolve().parent) if analysis else None
+
+
 def cmd_design_propose(a):
     log = _load_log(a.analysis)
+    taste = _taste(a.taste, a.analysis)
     drafts = propose(a.mood, log=log, scripts=tuple(a.scripts), installed_only=not a.allow_uninstalled_fonts,
-                     limit=a.limit, pairings=a.pairings)
+                     limit=a.limit, pairings=a.pairings, taste=taste)
     index = render_mockups(drafts, log, a.out, script_lines=_script_lines(a.lines))
-    print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index),
+    print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index), "taste": bool(taste),
+                      "refs": {d.id: d.refs for d in drafts if d.refs},
                       "notes": [n for d in drafts for n in d.notes]}, ensure_ascii=False))
     return 0
 
@@ -378,6 +389,8 @@ def cmd_qa(a):
         report.findings += legibility(load_design(a.design))
     extras, sections, looked_at = {}, {}, []
     qa_dir = Path(a.out)
+    taste = tastelib.load_taste(a.taste) if a.taste else None
+    made = []
     if a.stills:
         times = [float(t) for t in a.stills.split(",") if t.strip()]
         made = qa_stills(export, times, qa_dir / "stills")
@@ -395,6 +408,11 @@ def cmd_qa(a):
             diff, {t: (b.name, n.name) for t, b, n in zip(mids, before, after)})
     if looked_at and not a.no_people:
         report.findings += text_over_people(list(dict.fromkeys(looked_at)))
+    if taste and taste.get("targets"):
+        if not made:
+            made = qa_stills(export, [round(probe(export).duration * f, 2) for f in (0.2, 0.5, 0.8)],
+                             qa_dir / "stills")
+        report.findings += taste_check(made, taste)
     if a.share:
         copy = share_copy(export, Path(a.share))
         extras["Share copy"] = f"`{copy}` ({copy.stat().st_size / 1e6:.1f} MB)"
@@ -414,7 +432,14 @@ def cmd_text_cover(a):
 
 def cmd_grade_propose(a):
     log = _load_log(a.analysis)
-    looks = looks_for(a.mood, limit=a.limit)
+    taste = _taste(a.taste, a.analysis)
+    goal = (taste or {}).get("targets")
+    if goal:
+        footage = footage_stats(log, Path(a.out))
+        looks = [look_from_taste(goal, footage)] + looks_for(a.mood + tastelib.mood_words(taste),
+                                                             limit=max(1, a.limit - 1))
+    else:
+        looks = looks_for(a.mood, limit=a.limit)
     index = render_look_previews(looks, log, a.out)
     match = exposure_offsets(log)
     print(json.dumps({"looks": [l.id for l in looks], "index": str(index),
@@ -428,7 +453,7 @@ def cmd_grade_choose(a):
     look_id = a.id or choice.get("id")
     if not look_id:
         raise GradeError(f"no look chosen yet in {a.dir} — run grade-preview and click one, or pass --id")
-    look = next((l for l in load_looks() if l.id == look_id), None)
+    look = next((l for l in load_looks() if l.id == look_id), None) or look_from_dir(a.dir, look_id)
     if look is None:
         raise GradeError(f"unknown look '{look_id}'")
     log = _load_log(a.analysis)
@@ -440,6 +465,49 @@ def cmd_grade_choose(a):
     print(json.dumps({"grade": str(path), "look": look.id, "note": choice.get("note"),
                       "matched": len(match["offsets"]), "beyond_match": len(match["beyond_match"])},
                      ensure_ascii=False))
+    return 0
+
+
+def cmd_taste_add(a):
+    at = [float(t) for t in a.at.split(",") if t.strip()] if a.at else None
+    added = tastelib.add_refs(a.dir, a.sources, role="avoid" if a.avoid else "want", at=at)
+    print(json.dumps({"refs": [{"id": e["id"], "file": e["file"], "role": e["role"], "kind": e["kind"],
+                                "frames": e.get("frames", [])} for e in added]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_taste_measure(a):
+    data = tastelib.measure_refs(a.dir)
+    goal = data["targets"]
+    print(json.dumps({"taste": str(Path(a.dir) / tastelib.WORKING), "refs": len(data["refs"]),
+                      "palette": [s["hex"] for s in goal.get("palette", [])],
+                      "contrast": goal.get("contrast"), "warmth": goal.get("warmth"),
+                      "untraited": [r["id"] for r in data["refs"] if not r["traits"]]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_taste_board(a):
+    board = tastelib.render_board(a.dir)
+    if a.no_serve:
+        print(json.dumps({"board": str(board)}, ensure_ascii=False))
+        return 0
+    server, url = serve(board.parent, port=a.port, page=tastelib.BOARD, handler=tastelib.TasteHandler)
+    url = f"{url}/{tastelib.BOARD}"
+    print(json.dumps({"board": str(board), "url": url, "waiting": not a.no_wait}, ensure_ascii=False), flush=True)
+    if a.no_wait:
+        return 0
+    choice = wait_for_choice(server, board.parent, timeout=a.timeout, poll=a.poll)
+    print(json.dumps({"saved": bool(choice), "approved": (choice or {}).get("approved"),
+                      "rejected": (choice or {}).get("rejected"), "note": (choice or {}).get("note")},
+                     ensure_ascii=False))
+    return 0 if choice else 1
+
+
+def cmd_taste_choose(a):
+    out = tastelib.choose(a.dir, none=a.none, note=a.note)
+    data = tastelib.load_taste(out)
+    print(json.dumps({"taste": str(out), "refs": len(data["refs"]), "approved": data["approved_traits"],
+                      "rejected": data["rejected_traits"]}, ensure_ascii=False))
     return 0
 
 
@@ -536,6 +604,7 @@ def parser():
     dp.add_argument("--pairings", type=int, default=2,
                     help="typefaces offered per direction (spec: 2-3)")
     dp.add_argument("--lines", help="JSON array of real caption lines to typeset in the mockups")
+    dp.add_argument("--taste", help="plan/taste.json (default: the one beside --analysis, if any)")
     dp.set_defaults(fn=cmd_design_propose)
     dv = sub.add_parser("design-preview")
     dv.add_argument("--dir", required=True)
@@ -594,6 +663,7 @@ def parser():
     qa.add_argument("--target", type=float, default=-16.0)
     qa.add_argument("--diff", metavar="PREV", help="a previous render: list where this one differs from it")
     qa.add_argument("--no-people", action="store_true", help="skip the text-over-people check on stills")
+    qa.add_argument("--taste", help="plan/taste.json — compares stills with the references")
     qa.set_defaults(fn=cmd_qa)
 
     cover = sub.add_parser("text-cover")
@@ -605,6 +675,7 @@ def parser():
     gp.add_argument("--out", required=True)
     gp.add_argument("--mood", nargs="*", default=[])
     gp.add_argument("--limit", type=int, default=3)
+    gp.add_argument("--taste", help="plan/taste.json (default: the one beside --analysis, if any)")
     gp.set_defaults(fn=cmd_grade_propose)
     gc = sub.add_parser("grade-choose")
     gc.add_argument("--dir", required=True)
@@ -614,6 +685,28 @@ def parser():
     gc.add_argument("--target-luma", type=float, dest="target_luma")
     gc.add_argument("--design-hint", dest="design_hint")
     gc.set_defaults(fn=cmd_grade_choose)
+    ta = sub.add_parser("taste-add")
+    ta.add_argument("sources", nargs="+", help="image or video URLs or files")
+    ta.add_argument("--dir", required=True)
+    ta.add_argument("--avoid", action="store_true", help="these are examples of what the video must not look like")
+    ta.add_argument("--at", help="comma-separated times to sample from a video reference")
+    ta.set_defaults(fn=cmd_taste_add)
+    tm = sub.add_parser("taste-measure")
+    tm.add_argument("--dir", required=True)
+    tm.set_defaults(fn=cmd_taste_measure)
+    tb = sub.add_parser("taste-board")
+    tb.add_argument("--dir", required=True)
+    tb.add_argument("--no-serve", action="store_true", dest="no_serve")
+    tb.add_argument("--no-wait", action="store_true", dest="no_wait")
+    tb.add_argument("--timeout", type=float, default=1800)
+    tb.add_argument("--poll", type=float, default=0.5)
+    tb.add_argument("--port", type=int, default=0)
+    tb.set_defaults(fn=cmd_taste_board)
+    tc = sub.add_parser("taste-choose")
+    tc.add_argument("--dir", required=True)
+    tc.add_argument("--none", action="store_true", help="no references: approve an empty taste")
+    tc.add_argument("--note")
+    tc.set_defaults(fn=cmd_taste_choose)
     return p
 
 

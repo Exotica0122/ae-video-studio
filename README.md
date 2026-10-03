@@ -7,7 +7,7 @@ from footage, voice recordings and a short brief to a 4K master, with a preview 
 before every creative or expensive step (story → design & fonts → grade → 15 s test →
 key stills → review render → master).
 
-> Status: all eight skills are in place; the flow runs end to end from footage to master.
+> Status: all nine skills are in place; the flow runs end to end from footage to master.
 > The design is in [`docs/design.md`](docs/design.md). Skills were generalised from a first
 > real production; no project footage, audio, names or logos are kept in this repo.
 
@@ -117,7 +117,7 @@ Install from your clone instead of GitHub so your changes load:
 .claude-plugin/   plugin + dev marketplace manifests
 docs/design.md    flow, gates, skills, edit-plan format, lessons learned
 skills/           one folder per skill; video-director, studio-doctor, footage-logging,
-                  design-system, color-grade, audio-post, ae-build-render, video-qa
+                  taste, design-system, color-grade, audio-post, ae-build-render, video-qa
 engine/aestudio/  media.py ffprobe/ffmpeg helpers, footage.py footage logging, transcribe.py Whisper
                   import, fonts.py installed-font catalogue, designgen.py compose design drafts,
                   styleframe.py render mockup HTML, preview.py serve mockups + record the choice

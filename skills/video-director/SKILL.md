@@ -30,18 +30,22 @@ changes it.
 |---|---|---|---|
 | 0 Brief | Ask questions **one at a time**: purpose, audience, length, must-have dates/contacts, logo. Write it up. | — | `plan/brief.md` |
 | 1 Story | Propose a beat table (beat × voice × footage) from the brief and the contact sheets. | `footage-logging` first | `plan/story.md` |
-| 2 Design | Show 2–3 directions built from this video's own footage, let the user click one, confirm with a real still. | `design-system` | `plan/design.json` |
-| 3 Grade | Same 4 shots in 3–4 looks, side by side. | `color-grade` | `plan/grade.json` |
-| 4 Test clip | Render ~15 s of the opening for real. | `audio-post`, then `ae-build-render` | `plan/edit.json` |
-| 5 Key stills | Lower third, end card, logo placement, any scripture page. | `ae-build-render` | decision log |
-| 6 Review render | Full 1080p render plus share copy and a QA report. | `video-qa` | `qa/report-vNN.md` |
-| 7 Master | 4K render. | `ae-build-render` | `exports/` |
+| 2 Taste | Ask for reference images or clips, including what to avoid; measure them, write their traits, let the user tick them on the board. No refs is a valid answer (`taste-choose --none`). | `taste` | `plan/taste.json` |
+| 3 Design | Show 2–3 directions built from this video's own footage, let the user click one, confirm with a real still. | `design-system` | `plan/design.json` |
+| 4 Grade | Same 4 shots in 3–4 looks, side by side. | `color-grade` | `plan/grade.json` |
+| 5 Test clip | Render ~15 s of the opening for real. | `audio-post`, then `ae-build-render` | `plan/edit.json` |
+| 6 Key stills | Lower third, end card, logo placement, any scripture page. | `ae-build-render` | decision log |
+| 7 Review render | Full 1080p render plus share copy and a QA report. | `video-qa` | `qa/report-vNN.md` |
+| 8 Master | 4K render. | `ae-build-render` | `exports/` |
 
 Record every decision as it is made:
 
 ```
 decide --dir <project> --gate <n> --what "<what they chose>" [--detail "<why, or what to change>"]
 ```
+
+Projects started before the taste gate existed log later gates one number lower; `status` reads them
+by label, so they still show as done.
 
 ## Credits
 
@@ -54,11 +58,15 @@ credits check --dir <project>     # media in plan/edit.json with no credit; exit
 
 The user sets the licence: read it off the item's own page and confirm it with them, never assume one.
 Put restrictions in `--notes` (e.g. "in-church screening only, not for upload"). Run `credits check`
-before gate 6 and again before delivering the master.
+before gate 7 and again before delivering the master.
 
 ## Rules
 
-- **Never skip a gate because the change looks small.** After gate 6, a small tweak re-uses the same
+- **Read `plan/taste.json` before every creative step after gate 2** — layouts, text styling,
+  animation, grade. Follow its `approved_traits`, avoid its `rejected_traits`, and say which reference
+  a choice follows. If the user shares a new reference later, add it with the `taste` skill and
+  re-approve rather than keeping it in the conversation.
+- **Never skip a gate because the change looks small.** After gate 7, a small tweak re-uses the same
   gate with a still or an audio-only render instead of a full one.
 - **Nothing expensive or taste-dependent happens without a yes.** Renders, grades and designs are all
   shown before they are committed to.
