@@ -3,6 +3,10 @@
 Every design implements the same five components, so an edit plan works with any design.
 Times are seconds on the timeline. Pixel values in designs are authored for 3840×2160 and scale with the comp width.
 
+Pixel values in a plan (layout `panels` `x`/`y`/`w`/`h`, CRT `bar_top`/`bar_bottom` above 1) are comp pixels.
+Set `"design_size": [1920, 1080]` at the top of the plan to author them for that frame instead: they are scaled
+to `format` on load, so the same plan renders a 1080p review and a 4K master by changing only `format`.
+
 ## Text segments
 
 A line is a list of segments: plain strings, or `{"hl": "text"}` for the emphasised phrase.

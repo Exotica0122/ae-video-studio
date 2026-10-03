@@ -89,6 +89,20 @@ class Plan:
     grade: dict
     fade_out: float
     project: Path | None
+    design_size: tuple | None = None
+
+
+def _scale_graphic(g, sx, sy):
+    """Comp-pixel fields only: fractions and 4K-basis design px already follow the format."""
+    for p in g.get("panels") or []:
+        if isinstance(p, dict):
+            for key, k in (("x", sx), ("w", sx), ("y", sy), ("h", sy)):
+                if isinstance(p.get(key), (int, float)):
+                    p[key] = round(p[key] * k, 3)
+    for key in ("bar_top", "bar_bottom"):
+        v = g.get(key)
+        if isinstance(v, (int, float)) and v > 1:
+            g[key] = round(v * sy, 3)
 
 
 class _Checker:
@@ -136,6 +150,15 @@ def load_plan(path, check_files: bool = True) -> Plan:
     fmt = Format(int(width), int(height), fps, duration)
     if fmt.duration <= 0:
         c.errors.append("format: 'duration' must be > 0")
+
+    design_size = data.get("design_size")
+    if design_size is not None:
+        if (not isinstance(design_size, list) or len(design_size) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in design_size)):
+            c.errors.append("'design_size' must be [width, height] in pixels")
+            design_size = None
+        else:
+            design_size = (float(design_size[0]), float(design_size[1]))
 
     voices, seen = [], set()
     for i, v in enumerate(data.get("voices", [])):
@@ -268,6 +291,8 @@ def load_plan(path, check_files: bool = True) -> Plan:
                         continue
                     p = c.path(it, "clip", f"{where}.items[{j}]")
                     it["clip"] = str(p) if p else None
+        if design_size:
+            _scale_graphic(g, fmt.width / design_size[0], fmt.height / design_size[1])
         graphics.append(g)
 
     project = data.get("project")
@@ -275,4 +300,4 @@ def load_plan(path, check_files: bool = True) -> Plan:
     if c.errors:
         raise PlanError(f"{path}:\n  " + "\n  ".join(c.errors))
     return Plan(name, path.parent, fmt, voices, shots, sfx, music, graphics, dict(data.get("grade", {})),
-                float(data.get("fade_out", 0.75)), project)
+                float(data.get("fade_out", 0.75)), project, design_size)
