@@ -51,6 +51,20 @@ class CliTest(unittest.TestCase):
             self.assertTrue(project.parent.is_dir())
             self.assertFalse(project.exists())
 
+    def test_next_version_never_reuses_an_existing_project(self):
+        with tempfile.TemporaryDirectory() as d:
+            plan = write_min_plan(Path(d))
+            (Path(d) / "build").mkdir()
+            (Path(d) / "build" / "CLI_DEMO.aep").write_text("x")
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(main(["compile", str(plan), "--design", "notebook", "--next-version"]), 0)
+            jsx = Path(json.loads(out.getvalue())["jsx"])
+            self.assertEqual(jsx.name, "CLI_DEMO-v02.jsx")
+            text = jsx.read_text(encoding="utf-8")
+            self.assertIn("CLI_DEMO-v02.aep", text)
+            self.assertIn('"closeOpen":true', text)
+            self.assertEqual(json.loads(jsx.with_suffix(".plan.json").read_text())["name"], "CLI_DEMO")
+
     def test_known_error_exits_2(self):
         err = io.StringIO()
         with redirect_stderr(err):

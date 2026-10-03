@@ -390,6 +390,9 @@ var AES = (function () {
         var report = {ok: false};
         ctx = {comp: null, folder: null, layers: {}, warnings: []};
         try {
+            if (spec.closeOpen && app.project.file && (!spec.project || app.project.file.fsName !== new File(spec.project).fsName)) {
+                app.project.close(CloseOptions.SAVE_CHANGES);
+            }
             if (spec.project && app.project.file && app.project.file.fsName !== new File(spec.project).fsName) {
                 throw new Error("A different project is open (" + app.project.file.fsName + "). Open " +
                     spec.project + " or a new, unsaved project, then build again.");

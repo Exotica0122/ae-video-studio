@@ -1,6 +1,7 @@
 """ae-video-studio command line: python3 -m aestudio <command> ..."""
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from .grade import (GradeError, exposure_offsets, grade_plan, load_looks, looks_
                      render_look_previews, save_grade)
 from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
+from .util import next_free
 from .media import MediaError, probe
 from .ops import OpsError
 from .plan import PlanError, load_plan
@@ -43,10 +45,13 @@ def _compile(a) -> Path:
         project = Path(a.project).resolve()
     else:
         project = plan.project or (plan.root / "build" / f"{plan.name}.aep").resolve()
+    if a.next_version:
+        project = next_free(project)
     project.parent.mkdir(parents=True, exist_ok=True)
-    out = Path(a.out).resolve() if a.out else plan.root / "build" / f"{plan.name}.jsx"
+    out = Path(a.out).resolve() if a.out else plan.root / "build" / f"{project.stem if a.next_version else plan.name}.jsx"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(emit_script(ops, project=str(project)), encoding="utf-8")
+    out.write_text(emit_script(ops, project=str(project), close_open=a.next_version), encoding="utf-8")
+    shutil.copyfile(a.plan, out.with_suffix(".plan.json"))  # the exact plan behind this build, for diffing later
     print(json.dumps({"jsx": str(out), "ops": len(ops), "fonts": sorted(design.fonts())}, ensure_ascii=False))
     return out
 
@@ -394,6 +399,8 @@ def parser():
         c.add_argument("--design", required=True)
         c.add_argument("--name")
         c.add_argument("--project")
+        c.add_argument("--next-version", action="store_true",
+                       help="build into the next unused <name>-vNN.aep, saving and closing whatever project is open")
         c.add_argument("--out")
         c.add_argument("--timeout", type=float, default=900)
         c.set_defaults(fn=fn)
