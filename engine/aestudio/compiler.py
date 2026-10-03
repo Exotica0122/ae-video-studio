@@ -1,6 +1,6 @@
 """edit plan + design -> ops."""
 from .audio import duck_keys, sfx_fade_keys
-from .components import REGISTRY
+from .components import DEFAULTS, REGISTRY
 from .context import Context
 from .ops import Ops, validate_ops
 from .timing import check_fresh, load_transcript, voice_times
@@ -95,7 +95,10 @@ def compile_plan(plan, design) -> list:
     ctx = Context(design, ops, f.width, f.height, f.duration, voices, {"lumetri": base_grade},
                   graphics_from=len(ops.items))
     for g in plan.graphics:
-        treatment, options = design.treatment(g["type"])
+        if g["type"] in design.components or g["type"] not in DEFAULTS:
+            treatment, options = design.treatment(g["type"])
+        else:
+            treatment, options = DEFAULTS[g["type"]], {}
         builder = REGISTRY.get((g["type"], treatment))
         if builder is None:
             raise CompileError(f"no treatment '{treatment}' for '{g['type']}' (design {design.id}); registered: "

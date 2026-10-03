@@ -3,7 +3,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-GRAPHIC_TYPES = ("title-page", "opening", "backdrop", "scrapbook", "caption", "quote", "lower-third", "end-card", "inset", "layout")
+GRAPHIC_TYPES = ("title-page", "opening", "backdrop", "scrapbook", "caption", "quote", "lower-third", "end-card", "inset", "layout",
+                 "block", "chips", "subtitle", "fade-in")
 
 
 class PlanError(ValueError):
@@ -206,13 +207,23 @@ def load_plan(path, check_files: bool = True) -> Plan:
         gtype = g.get("type")
         if gtype not in GRAPHIC_TYPES:
             c.errors.append(f"{where}: unknown type '{gtype}' (expected one of {', '.join(GRAPHIC_TYPES)})")
-        if gtype in ("caption", "quote"):
+        if gtype in ("caption", "quote", "block", "subtitle"):
             voice = g.get("voice")
             if voice is None:
                 if g.get("in") is None or g.get("out") is None:
-                    c.errors.append(f"{where}: a caption without a voice needs 'in' and 'out'")
+                    c.errors.append(f"{where}: a {gtype} without a voice needs 'in' and 'out'")
             elif voice not in seen:
                 c.errors.append(f"{where}: unknown voice '{voice}'")
+        if gtype in ("chips", "fade-in") and (g.get("in") is None or g.get("out") is None):
+            c.errors.append(f"{where}: a {gtype} needs 'in' and 'out'")
+        if gtype == "chips" and not (g.get("chips") or g).get("words"):
+            c.errors.append(f"{where}: 'words' must be a non-empty list")
+        if gtype == "subtitle" and not g.get("lines"):
+            c.errors.append(f"{where}: 'lines' must be a non-empty list")
+        if gtype == "block":
+            b = g.get("block") or g
+            if not isinstance(b.get("x"), (int, float)) or not isinstance(b.get("y"), (int, float)):
+                c.errors.append(f"{where}: a block needs 'x' and 'y' (fractions of the frame)")
         # Any graphic may carry a backing photo - end cards, and title pages that
         # set their type over footage - so resolve it wherever it appears.
         if isinstance(g.get("photo"), dict):

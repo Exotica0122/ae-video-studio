@@ -81,5 +81,47 @@ scrim darkening only the band the type sits on. It covers `title-page`, `caption
   `title`/`year`/`tagline`/`rows`. Feeding it an info end card raises an error naming a treatment
   that does render rows.
 
+### blocks
+
+`engine/aestudio/components/blocks.py` adds four graphic types that work in any design (the design does
+not need to name them; each has a default treatment) and four treatments a design can pick. Colours are
+palette tokens; where a field takes a colour it also accepts `"white"`, `"black"` or `"#RRGGBB"`.
+`x`, `y`, `cx` are fractions of the frame; `width`, `cell`, `row_h`, `value_x` are 4K px and scale with the comp.
+
+| Type | Default treatment | Fields |
+|---|---|---|
+| `block` | `positioned` | `x`, `y`, `align` (`left`/`right`), `scrim` (`left`/`right`/`bottom`), `kicker`, `rule`, `rays`, `ray_color`, `width`, `items`, `rows`, `line_at`, `schedule`, `delay`, `step`, `line_pause`, `row_h`, `key_mult`, `value_x` |
+| `chips` | `divided` | `words`, `y`, `cx`, `cell`, `role`, `mult`, `hl` (indices), `scrim`, `delay`, `step` |
+| `subtitle` | `whole-line` | `lines`, `cx`, `y` (last line), `scale`, `fade`, `whole` |
+| `fade-in` | `solid` | `in`, `out`, `color` (default black) |
+
+```json
+{"type": "block", "voice": "N1", "x": 0.06, "y": 0.1, "scrim": "left", "kicker": "Question",
+ "items": [{"lines": [["우리 아이들이 가장 오래 머무는 곳,"]], "role": "body", "mult": 0.82},
+           {"lines": [["학교."]], "role": "headline", "mult": 1.9, "gap": 1.0}]}
+{"type": "block", "in": 31, "out": 41.8, "x": 0.07, "y": 0.26, "kicker": "Topics", "width": 1050,
+ "rows": [{"at": 32.7, "n": "01", "key": "Evolution"}, {"at": 37.6, "key": "Life", "key_color": "accent"}]}
+{"type": "chips", "in": 72, "out": 75.6, "y": 0.885, "cell": 620, "scrim": "bottom", "words": ["one", "two", "three"]}
+{"type": "subtitle", "in": 13.3, "out": 15.5, "lines": [["Whole line, no word reveal"]], "y": 0.955, "fade": 0.12}
+{"type": "fade-in", "in": 0.4, "out": 1.8}
+```
+
+- `block` items are `{lines, role, mult, gap, after, color}`; rows are `{at, key, value, n, key_color}`.
+  Words follow the `voice`, or a schedule when there is none (or `schedule: true`); `line_at` gives each
+  line its own start time instead.
+- `subtitle` shows each line whole when there is no voice; with a voice and `whole: false` it reveals word by word.
+
+Treatments a design can choose:
+
+| Component | Treatment | What it adds |
+|---|---|---|
+| caption, quote | `label-scrim` | `line-fade` over `scrim-caption.png`, optional `tint` (paper %), a spaced `label` above and `by` below. A caption carrying `black_in`, `sub`, `block` or `chips` renders as `fade-in`, `subtitle`, `block` or `chips` with those fields. |
+| title-page | `light-rays` | Scripture lines over a paper tint and slow diagonal rays (`ray_color`, `tint`, `photo`, `voice`, `ref`). |
+| end-card | `date-row` | Logo, `kicker`, `title`, optional `dates: [{num, label, sub}]` between rules, `contact` and `contact_label`. `logo.color` tints the mark with a token or `"white"`; `logo.tint: false` keeps its colours. |
+| layout | `accent-band` | Editorial panels over an accent `band` (`{y, h}` or `false`), `kicker`, `title`. `crt: true` turns the first panel into a black-and-white CRT with `bar_top` / `bar_bottom` bars (≤ 1 is a fraction of the height, larger is px); `split: true` adds right-hand pull `quotes: [{in, out, lines: [{text, hl}], note}]`. |
+
+These treatments read their scrims from beside the design.json: `scrim-left.png`, `scrim-right.png`,
+`scrim-caption.png`, `scrim-split.png` and `crt-vignette.png`, each only when a graphic uses it.
+
 A new treatment is a function registered with `@register(component, treatment)` in
 `engine/aestudio/components/`, built only from ops and the helpers in `layout.py`.
