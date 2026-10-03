@@ -3,7 +3,7 @@ from .audio import duck_keys, sfx_fade_keys
 from .components import REGISTRY
 from .context import Context
 from .ops import Ops, validate_ops
-from .timing import load_transcript, voice_times
+from .timing import check_fresh, load_transcript, voice_times
 from .util import r3
 
 
@@ -49,7 +49,11 @@ def compile_plan(plan, design) -> list:
     f = plan.format
     ops = Ops()
     ops.add("comp", name=plan.name, width=f.width, height=f.height, fps=f.fps, duration=f.duration, bg=[0, 0, 0])
-    voices = {v.id: voice_times(v, load_transcript(v.transcript)) for v in plan.voices}
+    voices = {}
+    for v in plan.voices:
+        tr = load_transcript(v.transcript)
+        check_fresh(v, tr)
+        voices[v.id] = voice_times(v, tr)
     base_grade = {str(k): v for k, v in plan.grade.get("lumetri", {}).items()}
 
     # A montage of hard cuts with no transition grammar reads as a slideshow. A short

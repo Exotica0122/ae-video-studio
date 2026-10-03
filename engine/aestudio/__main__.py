@@ -122,7 +122,7 @@ def cmd_transcribe(a):
 
 
 def cmd_import_transcript(a):
-    return _print_transcript(a.out, import_transcript(a.src, a.out))
+    return _print_transcript(a.out, import_transcript(a.src, a.out, a.audio))
 
 
 def _load_log(analysis):
@@ -429,6 +429,7 @@ def parser():
     it = sub.add_parser("import-transcript")
     it.add_argument("src")
     it.add_argument("--out", required=True)
+    it.add_argument("--audio", help="the audio it was made from; compile then refuses it if that audio changes")
     it.set_defaults(fn=cmd_import_transcript)
     dp = sub.add_parser("design-propose")
     dp.add_argument("--analysis", required=True)
