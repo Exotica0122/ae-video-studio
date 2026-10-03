@@ -4,12 +4,15 @@ Everything here measures the file that was actually produced. A QA pass that rea
 the edit plan instead of the export cannot catch the failures worth catching: a comp that
 rendered black, music that swallows the first word, an SFX nobody can hear.
 """
+import array
 import contextlib
 import json
+import math
 import re
 import tempfile
 import shutil
 import subprocess
+import wave
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -32,7 +35,7 @@ class QAError(RuntimeError):
 @dataclass
 class Finding:
     check: str
-    status: str              # "ok" | "warn" | "fail"
+    status: str              # "ok" | "warn" | "fail" | "skip"
     detail: str
 
     @property
@@ -326,6 +329,163 @@ def legibility(design, minimum: float = WCAG_AA) -> list:
     return findings
 
 
+# ---------------------------------------------------------------- render diff
+
+DIFF_FPS = 10
+DIFF_WIDTH = 320
+PIXEL_DELTA = 24             # a luma change this large is content, not encoder noise
+CHANGED_PIXELS_PCT = 0.1     # % of the frame that must change for the frame to count
+AUDIO_WINDOW = 0.5
+AUDIO_DELTA_DB = 1.0
+AUDIO_FLOOR_DB = -70.0       # below this both sides are silence; dither differences mean nothing
+
+
+@dataclass
+class Change:
+    start: float
+    end: float
+    peak: float
+
+    @property
+    def mid(self) -> float:
+        return round((self.start + self.end) / 2, 2)
+
+
+@dataclass
+class RenderDiff:
+    previous: str
+    current: str
+    prev_duration: float
+    cur_duration: float
+    video: list = field(default_factory=list)
+    audio: list = field(default_factory=list)
+    audio_note: str = ""
+
+    @property
+    def common(self) -> float:
+        return min(self.prev_duration, self.cur_duration)
+
+    @property
+    def same_duration(self) -> bool:
+        return abs(self.prev_duration - self.cur_duration) < 1.0 / DIFF_FPS
+
+
+def clock(t: float) -> str:
+    minutes, seconds = divmod(max(0.0, float(t)), 60)
+    return f"{int(minutes)}:{seconds:05.2f}"
+
+
+def changed_ranges(samples: list, threshold: float, step: float, gap: int = 1) -> list:
+    """Merge (time, score) samples over `threshold` into Changes, bridging `gap` quiet samples."""
+    ranges = []
+    for t, score in sorted(samples):
+        if score <= threshold:
+            continue
+        if ranges and t - ranges[-1].end <= gap * step + 1e-6:
+            ranges[-1].end = round(t + step, 3)
+            ranges[-1].peak = max(ranges[-1].peak, score)
+        else:
+            ranges.append(Change(round(t, 3), round(t + step, 3), score))
+    return ranges
+
+
+def frame_differences(previous, current, fps: int = DIFF_FPS, width: int = DIFF_WIDTH) -> list:
+    """(time, % of pixels whose luma moved by more than PIXEL_DELTA) for each sampled frame."""
+    info = probe(current)
+    height = max(2, round(width * info.height / max(1, info.width) / 2) * 2)
+    prep = f"fps={fps},scale={width}:{height},format=yuv420p,setpts=PTS-STARTPTS"
+    graph = (f"[0:v]{prep}[a];[1:v]{prep}[b];"
+             f"[a][b]blend=all_mode=difference:shortest=1,"
+             f"lutyuv=y='if(gt(val,{PIXEL_DELTA}),255,0)',signalstats,metadata=mode=print")
+    out = _ffmpeg(["-v", "info", "-i", previous, "-i", current, "-filter_complex", graph,
+                   "-an", "-f", "null", "-"], "diffing frames")
+    samples, t = [], None
+    for line in out.splitlines():
+        if (m := re.search(r"pts_time:(\S+)", line)):
+            t = float(m.group(1))
+        elif t is not None and (m := re.search(r"signalstats\.YAVG=(\S+)", line)):
+            samples.append((round(t, 3), float(m.group(1)) / 255 * 100))
+            t = None
+    return samples
+
+
+def window_levels(wav_path, window: float = AUDIO_WINDOW) -> list:
+    """RMS level in dB of each consecutive window of a mono 16-bit wav."""
+    with wave.open(str(wav_path), "rb") as w:
+        rate = w.getframerate()
+        data = array.array("h", w.readframes(w.getnframes()))
+    size = max(1, int(rate * window))
+    levels = []
+    for i in range(0, len(data) - size + 1, size):
+        chunk = data[i:i + size]
+        rms = math.sqrt(sum(s * s for s in chunk) / size) / 32768
+        levels.append(20 * math.log10(rms) if rms > 0 else -120.0)
+    return levels
+
+
+def audio_differences(previous, current, window: float = AUDIO_WINDOW) -> list:
+    with decoded_audio(previous) as a, decoded_audio(current) as b:
+        before, after = window_levels(a, window), window_levels(b, window)
+    return [(round(i * window, 3), abs(max(x, AUDIO_FLOOR_DB) - max(y, AUDIO_FLOOR_DB)))
+            for i, (x, y) in enumerate(zip(before, after))]
+
+
+def render_diff(previous, current, fps: int = DIFF_FPS, width: int = DIFF_WIDTH,
+                pixels_pct: float = CHANGED_PIXELS_PCT, audio_db: float = AUDIO_DELTA_DB) -> RenderDiff:
+    """Where two renders differ, in picture and in sound, over the span they share."""
+    for path in (previous, current):
+        if not Path(path).exists():
+            raise QAError(f"no such export: {path}")
+    try:
+        before, after = probe(previous), probe(current)
+    except MediaError as e:
+        raise QAError(str(e)) from e
+    diff = RenderDiff(str(previous), str(current), before.duration, after.duration)
+    diff.video = changed_ranges(frame_differences(previous, current, fps, width), pixels_pct, 1.0 / fps)
+    if before.has_audio and after.has_audio:
+        diff.audio = changed_ranges(audio_differences(previous, current), audio_db, AUDIO_WINDOW)
+    elif before.has_audio != after.has_audio:
+        diff.audio_note = "only one of the two renders has an audio stream"
+    return diff
+
+
+def diff_findings(diff: RenderDiff) -> list:
+    findings = []
+    if not diff.same_duration:
+        findings.append(Finding("diff:duration", "warn",
+                                f"previous {diff.prev_duration:.2f}s vs now {diff.cur_duration:.2f}s "
+                                f"({diff.cur_duration - diff.prev_duration:+.2f}s); compared the first "
+                                f"{diff.common:.2f}s"))
+    spans = ", ".join(f"{clock(c.start)}–{clock(c.end)}" for c in diff.video) or "none"
+    findings.append(Finding("diff:picture", "ok", f"{len(diff.video)} changed range(s): {spans}"))
+    if diff.audio_note:
+        findings.append(Finding("diff:sound", "warn", diff.audio_note))
+    else:
+        spans = ", ".join(f"{clock(c.start)}–{clock(c.end)}" for c in diff.audio) or "none"
+        findings.append(Finding("diff:sound", "ok", f"{len(diff.audio)} changed range(s): {spans}"))
+    return findings
+
+
+def diff_section(diff: RenderDiff, still_pairs: dict = None) -> list:
+    """Markdown lines for "Changes vs previous"; still_pairs maps a midpoint to (previous, current)."""
+    lines = [f"- Previous: `{diff.previous}`"]
+    if not diff.same_duration:
+        lines.append(f"- Duration changed: {diff.prev_duration:.2f}s → {diff.cur_duration:.2f}s; "
+                     f"only the first {diff.common:.2f}s were compared")
+    if not diff.video and not diff.audio:
+        lines.append("- No picture or sound changes in the compared span.")
+    for kind, ranges, unit in (("Picture", diff.video, "% of pixels"), ("Sound", diff.audio, " dB")):
+        for c in ranges:
+            line = f"- {kind} {clock(c.start)}–{clock(c.end)} (peak {c.peak:.2f}{unit})"
+            pair = (still_pairs or {}).get(c.mid)
+            if pair:
+                line += f" — stills at {clock(c.mid)}: `{pair[0]}` → `{pair[1]}`"
+            lines.append(line)
+    if diff.audio_note:
+        lines.append(f"- Sound not compared: {diff.audio_note}")
+    return lines
+
+
 # ---------------------------------------------------------------- outputs
 
 def share_copy(src, out, height: int = 1080, crf: int = 20) -> Path:
@@ -339,12 +499,12 @@ def share_copy(src, out, height: int = 1080, crf: int = 20) -> Path:
     return out
 
 
-def stills(src, times: list, outdir, width: int = 1920) -> list:
+def stills(src, times: list, outdir, width: int = 1920, prefix: str = "still") -> list:
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     made = []
     for t in times:
-        out = outdir / f"still-{float(t):07.2f}.jpg".replace(" ", "0")
+        out = outdir / f"{prefix}-{float(t):07.2f}.jpg".replace(" ", "0")
         _ffmpeg(["-v", "error", "-y", "-ss", f"{float(t):.3f}", "-i", str(src), "-frames:v", "1",
                  "-vf", f"scale={width}:-2", "-q:v", "3", str(out)], f"still at {t}s")
         made.append(out)
@@ -358,10 +518,11 @@ def next_version(qa_dir) -> int:
     return max(used, default=0) + 1
 
 
-MARK = {"ok": "ok", "warn": "warn", "fail": "FAIL"}
+MARK = {"ok": "ok", "warn": "warn", "fail": "FAIL", "skip": "skipped"}
 
 
-def format_report(report: QAReport, version: int, extras: dict = None, today=None) -> str:
+def format_report(report: QAReport, version: int, extras: dict = None, today=None,
+                  sections: dict = None) -> str:
     lines = [f"# QA report v{version:02d}", "",
              f"- Export: `{report.export}`",
              f"- Date: {(today or date.today()).isoformat()}",
@@ -375,6 +536,8 @@ def format_report(report: QAReport, version: int, extras: dict = None, today=Non
         for f in report.failures + report.warnings:
             lines.append(f"- **[{MARK[f.status]}] {f.check}** — {f.detail}")
         lines.append("")
+    for heading, body in (sections or {}).items():
+        lines += [f"## {heading}", ""] + list(body) + [""]
     lines += ["## All checks", "", "| check | result | detail |", "|---|---|---|"]
     for f in report.findings:
         lines.append(f"| {f.check} | {MARK[f.status]} | {f.detail} |")
@@ -382,10 +545,11 @@ def format_report(report: QAReport, version: int, extras: dict = None, today=Non
     return "\n".join(lines)
 
 
-def write_report(qa_dir, report: QAReport, extras: dict = None, today=None) -> Path:
+def write_report(qa_dir, report: QAReport, extras: dict = None, today=None,
+                 sections: dict = None) -> Path:
     qa_dir = Path(qa_dir)
     qa_dir.mkdir(parents=True, exist_ok=True)
     version = next_version(qa_dir)
     out = qa_dir / f"report-v{version:02d}.md"
-    out.write_text(format_report(report, version, extras, today), encoding="utf-8")
+    out.write_text(format_report(report, version, extras, today, sections), encoding="utf-8")
     return out

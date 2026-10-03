@@ -1,5 +1,6 @@
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -103,6 +104,25 @@ class CliTest(unittest.TestCase):
             self.assertEqual(summary["clips"], 1)
             self.assertEqual(summary["images"], 2)
             self.assertEqual(summary["errors"], 0)
+
+
+@unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
+class QaDiffCliTest(unittest.TestCase):
+    def test_qa_diff_writes_the_changes_section_with_stills_and_checks_them_for_people(self):
+        from tests.test_videoqa import _clip
+        from aestudio.videoqa import Finding
+        with tempfile.TemporaryDirectory() as d:
+            a, b, qa_dir = Path(d) / "v1.mp4", Path(d) / "v2.mp4", Path(d) / "qa"
+            _clip(a)
+            _clip(b, box_at=2.0)
+            people = mock.Mock(return_value=[Finding("text-over-people:x", "ok", "none covered")])
+            with mock.patch("aestudio.__main__.text_over_people", people), redirect_stdout(io.StringIO()):
+                main(["qa", str(b), "--diff", str(a), "--out", str(qa_dir)])
+            text = (qa_dir / "report-v01.md").read_text(encoding="utf-8")
+            self.assertIn("## Changes vs previous", text)
+            self.assertIn("Picture 0:02.", text)
+            self.assertTrue(list((qa_dir / "stills").glob("prev-*.jpg")))
+            self.assertEqual([p.name[:6] for p in people.call_args[0][0]], ["still-"])
 
 
 if __name__ == "__main__":
