@@ -9,6 +9,7 @@ from pathlib import Path
 from .audiopost import AudioPostError, build as build_audio, merge_into
 from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
+from .deliver import DeliverError, deliver, parse_sizes
 from .components.layout import LayoutError
 from .design import DesignError, load_design
 from .doctor import DoctorError, format_report, run_checks
@@ -32,7 +33,7 @@ from .videoqa import (QAError, QAReport, decode_check, legibility, mix_loudness,
                       stills as qa_stills, stream_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -107,6 +108,14 @@ def cmd_still(a):
 def cmd_render(a):
     print(str(render(a.project, a.comp, a.out, rs=a.rs, om=a.om, allow_running_ae=a.allow_running_ae)))
     return 0
+
+
+def cmd_deliver(a):
+    name = a.name or (Path(a.master).stem if a.master else a.comp)
+    result = deliver(a.out, name, parse_sizes(a.sizes), master=a.master, project=a.project, comp=a.comp,
+                     lufs=a.lufs, tp=a.tp, allow_running_ae=a.allow_running_ae)
+    print(json.dumps(result, ensure_ascii=False, indent=1))
+    return 0 if result["ok"] else 1
 
 
 def cmd_log_footage(a):
@@ -422,6 +431,17 @@ def parser():
     e.add_argument("--om", default="High Quality")
     e.add_argument("--allow-running-ae", action="store_true")
     e.set_defaults(fn=cmd_render)
+    dl = sub.add_parser("deliver", help="H.264 delivery copies of the master, loudness-normalised and verified")
+    dl.add_argument("--master", help="an existing ProRes master; otherwise render one from --project/--comp")
+    dl.add_argument("--project")
+    dl.add_argument("--comp")
+    dl.add_argument("--name", help="file name stem (default: the master's stem, or the comp name)")
+    dl.add_argument("--sizes", default="4k,1080", help="comma-separated: 4k, master, or a height such as 1080")
+    dl.add_argument("--out", default="exports/final")
+    dl.add_argument("--lufs", type=float, default=-16.0)
+    dl.add_argument("--tp", type=float, default=-2.0)
+    dl.add_argument("--allow-running-ae", action="store_true")
+    dl.set_defaults(fn=cmd_deliver)
     lf = sub.add_parser("log-footage")
     lf.add_argument("sources", nargs="+")
     lf.add_argument("--out", required=True)
