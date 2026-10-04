@@ -104,7 +104,8 @@ def _download_page(url: str, stem: Path) -> Path:
         raise TasteError(f"{url} is a web page, not an image — open it and copy the image address, "
                          "or install yt-dlp for video pages")
     result = subprocess.run([tool, "-q", "--no-playlist", "--no-warnings", "-f", "b[height<=720]/b",
-                             "-o", f"{stem}.%(ext)s", url], capture_output=True, text=True)
+                             "--max-filesize", str(MAX_DOWNLOAD), "-o", f"{stem}.%(ext)s", "--", url],
+                            capture_output=True, text=True)
     found = sorted(p for p in stem.parent.glob(f"{stem.name}.*") if p.suffix.lower() in VIDEO_SUFFIXES)
     if result.returncode != 0 or not found:
         tail = " / ".join((result.stderr or "").strip().splitlines()[-2:])

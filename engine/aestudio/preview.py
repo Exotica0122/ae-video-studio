@@ -30,6 +30,9 @@ def _known_ids(directory) -> set:
         return set()
 
 
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+
+
 class ChoiceHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         self._root = Path(directory).resolve()
@@ -64,6 +67,8 @@ class ChoiceHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.split("?")[0] != "/choose":
             return self._json(404, {"ok": False, "error": "unknown endpoint"})
+        if not self._same_origin():
+            return self._json(403, {"ok": False, "error": "cross-origin request refused"})
         try:
             length = int(self.headers.get("Content-Length") or 0)
             payload = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
@@ -77,6 +82,14 @@ class ChoiceHandler(SimpleHTTPRequestHandler):
         choice["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         (self._root / CHOICE_FILE).write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
         return self._json(200, {"ok": True})
+
+    def _same_origin(self) -> bool:
+        # a JSON content type forces a CORS preflight, which this server never answers
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        origin = self.headers.get("Origin")
+        kind = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        return (host in LOCAL_HOSTS and kind == "application/json"
+                and (origin is None or origin == f"http://{self.headers.get('Host')}"))
 
     def choose(self, payload: dict):
         """(choice, None) to record it, or (None, error) to refuse it."""
