@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +7,15 @@ from aestudio import media
 
 DEMO = Path(__file__).resolve().parents[2] / "examples" / "demo" / "media"
 CLIP, WAV = DEMO / "shot_a.mp4", DEMO / "narration-1.wav"
+
+
+class StillImageTest(unittest.TestCase):
+    def test_still_image_reads_at_time_zero(self):
+        with tempfile.TemporaryDirectory() as d:
+            still = Path(d) / "still.jpg"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=s=640x360",
+                            "-frames:v", "1", str(still)], check=True)
+            self.assertGreater(media.mean_luma(still, 0.0), 0.0)
 
 
 @unittest.skipUnless(CLIP.exists(), "run examples/demo/make_media.py first")
