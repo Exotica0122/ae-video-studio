@@ -10,6 +10,9 @@ from pathlib import Path
 
 from .videoqa import Finding
 
+ASPECT_TOLERANCE = 0.02
+SAME_BOX = 0.5
+
 SCRIPT = Path(__file__).with_name("vision_detect.swift")
 COVER_LIMIT = 0.15
 
@@ -83,12 +86,70 @@ def cover_findings(detections: list, limit: float = COVER_LIMIT) -> list:
     return findings
 
 
-def text_over_people(images: list, limit: float = COVER_LIMIT) -> list:
-    """Findings for any stills: warn where text covers more than `limit` of a face or person."""
+def iou(a, b) -> float:
+    inter = intersection(a, b)
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def with_clean_people(render: dict, clean: dict) -> dict:
+    """Text from the render, people from both: Vision often loses a person once text sits on them."""
+    if not clean or clean.get("error"):
+        return render
+    merged = dict(render)
+    for key in ("faces", "humans"):
+        boxes = list(render.get(key) or [])
+        boxes += [c for c in clean.get(key) or [] if all(iou(c, b) < SAME_BOX for b in boxes)]
+        merged[key] = boxes
+    return merged
+
+
+def text_over_people(images: list, limit: float = COVER_LIMIT, clean: list = None) -> list:
+    """Findings for any stills: warn where text covers more than `limit` of a face or person.
+
+    `clean`, when given, lines up with `images`: the same frame without graphics (or None).
+    """
     images = [Path(p) for p in images]
     if not images:
         return []
+    clean = list(clean or [None] * len(images))
+    extra = [Path(c) for c in clean if c]
     try:
-        return cover_findings(detect(images), limit)
+        found = detect(images + extra)
     except (RuntimeError, OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
         return [Finding("text-over-people", "skip", f"skipped — {e}")]
+    renders, plates = found[:len(images)], iter(found[len(images):])
+    merged = [with_clean_people(r, next(plates) if c else None) for r, c in zip(renders, clean)]
+    return cover_findings(merged, limit)
+
+
+def clean_plates(plan, design, times: list, outdir, width: int = 1280) -> list:
+    """For each time, a frame of the source shot under it, or None where graphics hide the footage
+    or the shot is reframed (zoom, push, other aspect) so its boxes would not line up."""
+    from .lint import _resolved, cover_span, plan_voices
+    from .media import MediaError, extract_frame, probe
+    covers = []
+    for g, tr, a, b in _resolved(plan, design, plan_voices(plan)):
+        span = cover_span(g, tr, a, b)
+        if span:
+            covers.append(span)
+    frame_aspect = plan.format.width / plan.format.height
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    plates = []
+    for t in times:
+        shot = next((s for s in reversed(plan.shots) if s.start <= t < s.end), None)
+        hidden = any(a <= t < b for a, b in covers)
+        if shot is None or hidden or shot.zoom != 1 or shot.motion:
+            plates.append(None)
+            continue
+        try:
+            info = probe(shot.clip)
+            if not info.height or abs(info.width / info.height - frame_aspect) > ASPECT_TOLERANCE * frame_aspect:
+                plates.append(None)
+                continue
+            out = outdir / f"clean-{float(t):07.2f}.jpg"
+            plates.append(extract_frame(shot.clip, shot.src_in + (t - shot.start), out, width=width))
+        except (MediaError, OSError, RuntimeError):
+            plates.append(None)
+    return plates

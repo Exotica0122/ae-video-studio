@@ -34,7 +34,7 @@ from .styleframe import render_mockups
 from . import taste as tastelib
 from .taste import TasteError
 from .timing import TimingError
-from .textcover import text_over_people
+from .textcover import clean_plates, text_over_people
 from .videoqa import (QAError, QAReport, decode_check, diff_findings, diff_section, legibility,
                       mix_loudness, music_before_voice, render_diff, section_loudness, sfx_audible,
                       share_copy, stills as qa_stills, stream_check, taste_check, write_report)
@@ -387,14 +387,14 @@ def cmd_qa(a):
         report.findings += sfx_audible(export, plan["sfx"], spans=spans)
     if a.design:
         report.findings += legibility(load_design(a.design))
-    extras, sections, looked_at = {}, {}, []
+    extras, sections, looked_at = {}, {}, {}
     qa_dir = Path(a.out)
     taste = tastelib.load_taste(a.taste) if a.taste else None
     made = []
     if a.stills:
         times = [float(t) for t in a.stills.split(",") if t.strip()]
         made = qa_stills(export, times, qa_dir / "stills")
-        looked_at += made
+        looked_at.update(zip(made, times))
         extras["Stills"] = ", ".join(f"`{p.name}`" for p in made)
     if a.diff:
         diff = render_diff(a.diff, export)
@@ -403,11 +403,15 @@ def cmd_qa(a):
         before = qa_stills(a.diff, mids, qa_dir / "stills", prefix="prev")
         after = qa_stills(export, mids, qa_dir / "stills")
         changed = {c.mid for c in diff.video}
-        looked_at += [p for p, t in zip(after, mids) if t in changed]
+        looked_at.update((p, t) for p, t in zip(after, mids) if t in changed)
         sections["Changes vs previous"] = diff_section(
             diff, {t: (b.name, n.name) for t, b, n in zip(mids, before, after)})
     if looked_at and not a.no_people:
-        report.findings += text_over_people(list(dict.fromkeys(looked_at)))
+        clean = None
+        if a.plan and a.design:
+            clean = clean_plates(load_plan(a.plan), load_design(a.design), list(looked_at.values()),
+                                 qa_dir / "stills")
+        report.findings += text_over_people(list(looked_at), clean=clean)
     if taste and taste.get("targets"):
         if not made:
             made = qa_stills(export, [round(probe(export).duration * f, 2) for f in (0.2, 0.5, 0.8)],
@@ -424,7 +428,10 @@ def cmd_qa(a):
 
 
 def cmd_text_cover(a):
-    findings = text_over_people(a.images, limit=a.limit)
+    if a.clean and len(a.clean) != len(a.images):
+        print("error: --clean needs one frame per image", file=sys.stderr)
+        return 2
+    findings = text_over_people(a.images, limit=a.limit, clean=a.clean)
     print(json.dumps([{"check": f.check, "status": f.status, "detail": f.detail} for f in findings],
                      ensure_ascii=False, indent=2))
     return 1 if any(f.bad for f in findings) else 0
@@ -669,6 +676,7 @@ def parser():
     cover = sub.add_parser("text-cover")
     cover.add_argument("images", nargs="+", help="stills to check for text over faces or people")
     cover.add_argument("--limit", type=float, default=0.15, help="share of a person box text may cover")
+    cover.add_argument("--clean", nargs="+", help="the same frames without graphics, in the same order")
     cover.set_defaults(fn=cmd_text_cover)
     gp = sub.add_parser("grade-propose")
     gp.add_argument("--analysis", required=True)

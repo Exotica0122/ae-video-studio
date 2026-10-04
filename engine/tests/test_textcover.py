@@ -41,6 +41,27 @@ def _detection(text_box, path="still-0030.60.jpg"):
             "text": [{"box": text_box, "string": "WHO TEACHES THEM"}]}
 
 
+class CleanPlateTest(unittest.TestCase):
+    FACE = [0.40, 0.20, 0.10, 0.16]
+
+    def test_person_lost_under_text_is_restored_from_the_clean_frame(self):
+        render = {"path": "r.jpg", "faces": [], "humans": [],
+                  "text": [{"string": "GOD", "box": [0.05, 0.22, 0.9, 0.1]}]}
+        merged = tc.with_clean_people(render, {"faces": [self.FACE], "humans": []})
+        [hit] = tc.covered_people(merged)
+        self.assertEqual(hit["kind"], "face")
+
+    def test_a_person_seen_in_both_frames_counts_once(self):
+        render = {"faces": [self.FACE], "humans": [], "text": []}
+        nudged = [0.41, 0.21, 0.10, 0.16]
+        merged = tc.with_clean_people(render, {"faces": [nudged], "humans": []})
+        self.assertEqual(merged["faces"], [self.FACE])
+
+    def test_no_clean_frame_leaves_the_render_alone(self):
+        render = {"faces": [self.FACE], "humans": [], "text": []}
+        self.assertIs(tc.with_clean_people(render, None), render)
+
+
 class CoveredPeopleTest(unittest.TestCase):
     def test_a_title_across_a_face_is_flagged_with_its_words(self):
         hits = tc.covered_people(_detection((0.0, 0.25, 1.0, 0.1)))

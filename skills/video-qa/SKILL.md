@@ -28,6 +28,8 @@ build the video** — the point is a reader who has no stake in the render being
 | `contrast:<a>-on-<b>` | A generated palette that came out pretty and unreadable (WCAG AA, 4.5:1). |
 | `text-over-people:<still>` | Text covering more than 15 % of a face or person box in a still. |
 | `diff:picture`, `diff:sound`, `diff:duration` | With `--diff`: what changed since the previous render, and whether its length changed. |
+| `taste:palette`, `taste:luma`, `taste:contrast`, `taste:warmth`, `taste:saturation` | A render that drifted from the approved references. Measured on the stills (20/50/80 % if `--stills` is not given). |
+| `taste:avoid` | Stills whose palette sits closer to the avoid refs than to the wanted ones. |
 
 ## Changes vs previous (`--diff PREV`)
 
@@ -53,17 +55,22 @@ rectangles and recognised-text boxes. A still warns when text covers more than 1
 person box, and the detail quotes the words. Without macOS or Swift, the check reports `skipped`.
 It never reports a pass it did not measure.
 
+Vision often loses a person once text sits on them, which would hide exactly the case this check
+is for. So when `qa` has `--plan` and `--design`, it also takes the same moment from the source
+shot, before any graphics, and finds people there. Text is taken from the render, and people from
+both frames. Moments under a full-frame graphic, or in a zoomed, pushed or different-aspect shot,
+use the render alone. With `text-cover`, pass the clean frames yourself with `--clean`, in the same
+order as the images.
+
 Run it on any stills, for example style frames or AE review stills:
 
 ```
-PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/engine python3 -m aestudio text-cover stills/*.jpg [--limit 0.15]
+PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/engine python3 -m aestudio text-cover stills/*.jpg [--limit 0.15] [--clean clean/*.jpg]
 ```
 
 Vision also reads text that is part of the footage, such as signs or shirts. Check the quoted
 words before you call it a graphics problem. The first run compiles the script, which takes a few
 seconds.
-| `taste:palette`, `taste:luma`, `taste:contrast`, `taste:warmth`, `taste:saturation` | A render that drifted from the approved references. Measured on the stills (20/50/80 % if `--stills` is not given). |
-| `taste:avoid` | Stills whose palette sits closer to the avoid refs than to the wanted ones. |
 
 Pass `--taste` whenever the project has a `plan/taste.json`. Then open the stills beside the
 references in `refs/` and check the `approved_traits` the numbers cannot see — type, layout, motion.
