@@ -1,5 +1,6 @@
 """Small helpers shared by the compiler and treatments."""
 import json
+from pathlib import Path
 
 
 def js(value) -> str:
@@ -17,3 +18,13 @@ def hex_rgb(value: str) -> list[float]:
 
 def r3(x) -> float:
     return round(float(x), 3)
+
+
+def next_free(path) -> Path:
+    """path if nothing is there yet, otherwise the first unused <stem>-vNN<suffix> beside it."""
+    base = Path(path)
+    path, n = base, 2
+    while path.exists():
+        path = base.with_name(f"{base.stem}-v{n:02d}{base.suffix}")
+        n += 1
+    return path

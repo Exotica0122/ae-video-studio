@@ -79,12 +79,12 @@ def check_ffmpeg(which=shutil.which) -> list:
 
 def check_whisper(command=None, which=shutil.which) -> Check:
     """Whisper is optional: only transcripts (and therefore synced captions) need it."""
-    cmd = command if command is not None else os.environ.get("AESTUDIO_WHISPER_CMD", "uvx mlx-whisper")
+    cmd = command if command is not None else os.environ.get("AESTUDIO_WHISPER_CMD", "uvx")
     head = cmd.split()[0] if cmd.strip() else ""
     if head and which(head):
         return Check("whisper", "ok", cmd)
     return Check("whisper", "warn", f"`{head or cmd}` not found — needed for word-timed captions",
-                 "Install uv (`brew install uv`) for the default `uvx mlx-whisper`, or set "
+                 "Install uv (`brew install uv`) for the default `uvx --from mlx-whisper mlx_whisper`, or set "
                  "AESTUDIO_WHISPER_CMD to any Whisper build that emits word timestamps. "
                  "You can also transcribe elsewhere and use `import-transcript`.")
 

@@ -50,6 +50,17 @@ class PreviewTest(unittest.TestCase):
         status, reply = get(url + "/choice")
         self.assertEqual(json.loads(reply)["id"], "paper-notebook-paperlogy")
 
+    def test_cross_origin_posts_are_refused(self):
+        self.server, url = preview.serve(self.dir)
+        body = json.dumps({"id": "paper-notebook-paperlogy"}).encode("utf-8")
+        for headers in ({"Content-Type": "application/json", "Origin": "https://evil.example"},
+                        {"Content-Type": "text/plain"}):
+            request = urllib.request.Request(url + "/choose", data=body, headers=headers, method="POST")
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(request, timeout=5)
+            self.assertEqual(cm.exception.code, 403)
+        self.assertIsNone(preview.read_choice(self.dir))
+
     def test_unknown_id_is_refused(self):
         self.server, url = preview.serve(self.dir)
         with self.assertRaises(urllib.error.HTTPError) as cm:

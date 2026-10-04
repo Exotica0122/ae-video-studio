@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 
 from aestudio.plan import Voice
-from aestudio.timing import TimingError, Transcript, align_words, load_transcript, voice_times
+from aestudio.timing import TimingError, Transcript, align_words, check_fresh, load_transcript, voice_times
+from aestudio.transcribe import audio_digest
 
 WORDS = [["모든", 0.10, 0.50], ["여정은", 0.50, 1.10], ["작은", 1.20, 1.60], ["한", 1.60, 1.80],
          ["걸음에서", 1.80, 2.60], ["시작됩니다.", 2.60, 3.50]]
@@ -31,6 +32,28 @@ class TimingTest(unittest.TestCase):
         vt = voice_times(v, tr)
         self.assertEqual([w[0] for w in vt.words], ["작은", "한", "걸음에서"])
         self.assertEqual((vt.onset, vt.offset), (20.0, 21.4))
+
+    def test_word_straddling_src_in_is_clamped_not_dropped(self):
+        tr = Transcript(0.08, 3.52, [tuple(w) for w in WORDS])
+        v = Voice("I1", Path("a.mov"), 20.0, Path("t.json"), src_in=1.0, src_out=2.6)
+        vt = voice_times(v, tr)
+        self.assertEqual(vt.words[0], ("여정은", 20.0, 20.1))
+        self.assertEqual(vt.words[1][0], "작은")
+
+    def test_stale_transcript_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            audio = Path(d) / "a.wav"
+            audio.write_bytes(b"take one")
+            tr = Transcript(0.0, 1.0, [("말", 0.0, 1.0)], audio_digest(audio))
+            v = Voice("N1", audio, 0.0, Path(d) / "t.json")
+            check_fresh(v, tr)
+            audio.write_bytes(b"take two")
+            with self.assertRaises(TimingError) as cm:
+                check_fresh(v, tr)
+            self.assertIn("re-run `transcribe`", str(cm.exception))
+
+    def test_transcript_without_digest_is_trusted(self):
+        check_fresh(Voice("N1", Path("missing.wav"), 0.0, Path("t.json")), Transcript(0.0, 1.0, [("말", 0.0, 1.0)]))
 
     def test_align_splits_inside_a_spoken_word(self):
         words = [tuple(w) for w in WORDS]

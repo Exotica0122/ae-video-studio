@@ -225,6 +225,27 @@ def music_plan(duration: float, music_length: float, *, tail: float = 1.2) -> li
     return segments
 
 
+DUCK = {"under_voice": -12, "breath": -9, "swell": -4, "tail": -2, "lead": 0.25}
+SEGMENT_KEYS = ("start", "src_in", "end", "fade_in", "fade_out")
+
+
+def music_segment(seg: dict, root, duration: float, target: float = TARGET_LUFS) -> dict:
+    """Level one segment of a multi-track bed; a segment is never looped, so its source must cover it."""
+    if not isinstance(seg, dict) or not seg.get("file"):
+        raise AudioPostError("each music segment needs a 'file'")
+    path = Path(seg["file"]) if Path(seg["file"]).is_absolute() else Path(root) / seg["file"]
+    measured = measure(path)
+    start, src_in = float(seg.get("start", 0.0)), float(seg.get("src_in", 0.0))
+    end = float(seg["end"]) if seg.get("end") is not None else duration
+    if src_in + (end - start) > measured.duration + 0.05:
+        raise AudioPostError(f"{seg['file']} is {measured.duration:.2f}s long; from src_in {src_in:g} it cannot "
+                             f"cover {start:g}–{end:g}s on the timeline")
+    out = {"file": seg["file"], **{k: seg[k] for k in SEGMENT_KEYS if seg.get(k) is not None},
+           "gain_db": gain_for(measured, target=target + float(seg.get("under", -6)))}
+    out["duck"] = seg.get("duck", DUCK)
+    return out
+
+
 def load_takes(spec: dict, root=".") -> list:
     """Read the takes half of an audio spec, resolving files against the project root.
 
@@ -284,8 +305,9 @@ def build(spec: dict, root=".", *, start=0.0, target=TARGET_LUFS) -> dict:
         out["music"] = {"file": music["file"],
                         "edit": music_plan(duration, measured.duration),
                         "gain_db": gain_for(measured, target=target + float(music.get("under", -6))),
-                        "duck": music.get("duck", {"under_voice": -12, "breath": -9, "swell": -4,
-                                                   "tail": -2, "lead": 0.25})}
+                        "duck": music.get("duck", DUCK)}
+    elif isinstance(music, list) and music:
+        out["music"] = [music_segment(seg, root, duration, target) for seg in music]
     out["duration"] = duration
     out["voice_spans"] = [list(s) for s in voice_spans(voices)]
     return out

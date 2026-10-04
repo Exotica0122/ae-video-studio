@@ -1,9 +1,10 @@
 """edit plan + design -> ops."""
-from .audio import duck_keys, sfx_fade_keys
-from .components import REGISTRY
+from .audio import duck_keys, segment_keys, sfx_fade_keys
+from .components import DEFAULTS, REGISTRY
 from .context import Context
+from .grade import LUMETRI
 from .ops import Ops, validate_ops
-from .timing import load_transcript, voice_times
+from .timing import check_fresh, load_transcript, voice_times
 from .util import r3
 
 
@@ -49,7 +50,11 @@ def compile_plan(plan, design) -> list:
     f = plan.format
     ops = Ops()
     ops.add("comp", name=plan.name, width=f.width, height=f.height, fps=f.fps, duration=f.duration, bg=[0, 0, 0])
-    voices = {v.id: voice_times(v, load_transcript(v.transcript)) for v in plan.voices}
+    voices = {}
+    for v in plan.voices:
+        tr = load_transcript(v.transcript)
+        check_fresh(v, tr)
+        voices[v.id] = voice_times(v, tr)
     base_grade = {str(k): v for k, v in plan.grade.get("lumetri", {}).items()}
 
     # A montage of hard cuts with no transition grammar reads as a slideshow. A short
@@ -61,9 +66,10 @@ def compile_plan(plan, design) -> list:
 
     for i, s in enumerate(plan.shots):
         dis = r3(s.dissolve if s.dissolve is not None else default_dis)
-        lum = dict(base_grade)
+        lum = {**base_grade, **s.lumetri}
         if s.exposure:
-            lum["20"] = r3(float(lum.get("20", 0)) + s.exposure)
+            ev = LUMETRI["exposure"]
+            lum[ev] = r3(float(lum.get(ev, 0)) + s.exposure)
         expr = _motion_exprs(s, f.width, f.height) or {}
         end = r3(s.end)
         # a shot only holds past its out point if the NEXT one dissolves over it
@@ -91,7 +97,10 @@ def compile_plan(plan, design) -> list:
     ctx = Context(design, ops, f.width, f.height, f.duration, voices, {"lumetri": base_grade},
                   graphics_from=len(ops.items))
     for g in plan.graphics:
-        treatment, options = design.treatment(g["type"])
+        if g["type"] in design.components or g["type"] not in DEFAULTS:
+            treatment, options = design.treatment(g["type"])
+        else:
+            treatment, options = DEFAULTS[g["type"]], {}
         builder = REGISTRY.get((g["type"], treatment))
         if builder is None:
             raise CompileError(f"no treatment '{treatment}' for '{g['type']}' (design {design.id}); registered: "
@@ -105,12 +114,16 @@ def compile_plan(plan, design) -> list:
 
     # the music ducks for anything the audience is meant to hear, voice or clip -
     # including clips inside graphics, which the plan declares as music.spans
-    extra = [tuple(sp) for sp in (plan.music.spans if plan.music else [])]
+    extra = [tuple(sp) for m in plan.music for sp in m.spans]
     spans = sorted([(vt.onset, vt.offset) for vt in voices.values()] + sound + extra)
-    if plan.music:
-        keys = duck_keys(spans, f.duration, **plan.music.duck)
-        ops.add("audio", id="MUSIC", file=str(plan.music.file), start=r3(plan.music.start), end=r3(f.duration),
-                levels=[[t, round(db + plan.music.gain_db, 3)] for t, db in keys])
+    for i, m in enumerate(plan.music):
+        keys = duck_keys(spans, f.duration, **m.duck)
+        end = f.duration if m.end is None else m.end
+        if len(plan.music) > 1 or m.end is not None or m.fade_in or m.fade_out:
+            keys = segment_keys(keys, m.start, end, m.fade_in, m.fade_out, floor=m.duck.get("floor", -40.0))
+        ops.add("audio", id="MUSIC" if len(plan.music) == 1 else f"MUSIC_{i + 1:02d}", file=str(m.file),
+                start=r3(m.start), end=r3(end), src_in=r3(m.src_in) if m.src_in else None,
+                levels=[[t, round(db + m.gain_db, 3)] for t, db in keys])
     onsets = [on for on, _ in spans]
     for i, sfx in enumerate(plan.sfx):
         keys = sfx_fade_keys(sfx.at, sfx.gain_db, onsets) if sfx.fade_before_voice else None

@@ -8,6 +8,7 @@ design.json as scrim-title.png / scrim-caption.png.
 Designed for a light-ink palette on dark footage: `ink` is used for the type, so
 a design using these treatments wants a pale `ink`, not a paper-dark one.
 """
+from ..grade import LUMETRI
 from ..util import r3
 from . import register
 from .layout import LayoutError, fade_ref, parse_line, schedule_times, scrim, span, text_block
@@ -24,14 +25,15 @@ RAMP_IN = 0.35
 def _photo_grade(ctx, photo):
     """The project grade, plus this photograph's own exposure trim.
 
-    Lumetri parameter "20" is exposure, matching how a shot's `exposure` is applied
-    in the compiler. A single underexposed frame - an indoor group shot that has to
-    carry type over it - can be lifted here without touching the global grade.
+    Exposure is added the same way the compiler applies a shot's `exposure`. A single
+    underexposed frame - an indoor group shot that has to carry type over it - can be
+    lifted here without touching the global grade.
     """
     lum = dict(ctx.grade.get("lumetri", {}))
     ev = float((photo or {}).get("exposure", 0) or 0)
     if ev:
-        lum["20"] = r3(float(lum.get("20", 0)) + ev)
+        key = LUMETRI["exposure"]
+        lum[key] = r3(float(lum.get(key, 0)) + ev)
     return lum or None
 
 

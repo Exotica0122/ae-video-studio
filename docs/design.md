@@ -50,15 +50,16 @@ preview the user can look at, and records the decision in the project's `plan/` 
 |---|---|---|---|---|
 | 0 | Brief | questions, one at a time | purpose, audience, length, must-have info (dates, contacts), logo | `plan/brief.md` |
 | 1 | Story | story table: beats × voice × footage | structure, what's in/out, testimony lines | `plan/story.md` |
-| 2 | Design | 2–3 style frames made from the real footage and real text, each with its own palette **and 2–3 font pairings** | design direction + fonts | `plan/design.json` |
-| 3 | Grade | same 4 representative shots in 3–4 looks, real AE renders, side by side | look (optionally "push it further") | `plan/grade.json` |
-| 4 | Test clip | real ~15 s render of the opening | "finish it" or adjust | notes in `plan/decisions.md` |
-| 5 | Key stills | lower third, end card, logo placement, any scripture page | details before the long render | `plan/decisions.md` |
-| 6 | Review render | full 1080p render + share copy + QA report | notes → fix → re-render | `qa/report-vNN.md` |
-| 7 | Master | final 4K render | done | `exports/` |
+| 2 | Taste | their reference images/clips (wanted and avoided), measured, with traits on a mood board | which traits to keep and which to avoid | `plan/taste.json` |
+| 3 | Design | 2–3 style frames made from the real footage and real text, each with its own palette **and 2–3 font pairings** | design direction + fonts | `plan/design.json` |
+| 4 | Grade | same 4 representative shots in 3–4 looks, real AE renders, side by side | look (optionally "push it further") | `plan/grade.json` |
+| 5 | Test clip | real ~15 s render of the opening | "finish it" or adjust | notes in `plan/decisions.md` |
+| 6 | Key stills | lower third, end card, logo placement, any scripture page | details before the long render | `plan/decisions.md` |
+| 7 | Review render | full 1080p render + share copy + QA report | notes → fix → re-render | `qa/report-vNN.md` |
+| 8 | Master | final 4K render | done | `exports/` |
 
 Rules:
-- A gate is never skipped because the change "looks small". Small tweaks after gate 6 can
+- A gate is never skipped because the change "looks small". Small tweaks after gate 7 can
   reuse the same gate with a still or an audio-only render instead of a full render.
 - Previews are shown on a self-contained local comparison page (`preview/index.html`,
   click to pick) that the plugin generates. No dependency on other plugins.
@@ -75,8 +76,9 @@ be re-run ("re-grade", "move the logo") without touching the others.
 | `studio-doctor` | Environment + bridge + font checks with fix instructions | — | console report |
 | `footage-logging` | Probe clips, contact sheets, per-shot luma, photo previews, transcripts with word timings | source folders | `analysis/footage.json` (per-clip and per-frame brightness, plus a per-photo `images` list, live in it), `analysis/transcripts/*.json`, `analysis/frames/*.jpg`, `analysis/sheets/*.jpg` |
 | `audio-post` | Trim/normalise voices, place voices with natural breaths, cut music to length, voice-aware ducking, SFX placement, loudness targets | `plan/story.md`, transcripts | `plan/edit.json` (voices, music, sfx sections) |
-| `color-grade` | Build look previews (gate 3), per-shot exposure matching, selective wall/colour calming | `analysis/footage.json` | `plan/grade.json` |
-| `design-system` | Creates 2–3 distinct design directions per video from primitives (gate 2), style frames, font pairings; saves reusable designs | brief, `plan/story.md`, footage | `plan/design.json`, `preview/` |
+| `taste` | Collects reference images/clips (gate 2), measures palette/contrast/warmth, records traits and the user's ticks | user links and files | `refs/`, `plan/taste.json` |
+| `color-grade` | Build look previews (gate 4), per-shot exposure matching, selective wall/colour calming; starts from the taste targets | `analysis/footage.json`, `plan/taste.json` | `plan/grade.json` |
+| `design-system` | Creates 2–3 distinct design directions per video from primitives (gate 3), style frames, font pairings; saves reusable designs | brief, `plan/story.md`, `plan/taste.json`, footage | `plan/design.json`, `preview/` |
 | `ae-build-render` | Compile `plan/edit.json` + design package into ExtendScript; build comp; test clip, stills, review render, 4K master; render polling | all of `plan/` | AE project, `exports/*` |
 | `video-qa` | Decode check, per-section loudness, music-before-voice check, SFX audibility, stills, share copy | exports, `plan/edit.json` | `qa/report-vNN.md`, share copy |
 
@@ -90,7 +92,8 @@ Created by `video-director` inside a folder the user picks (usually next to the 
 
 ```
 <project>/
-  plan/        brief.md  story.md  design.json  grade.json  edit.json  decisions.md
+  plan/        brief.md  story.md  taste.json  design.json  grade.json  edit.json  decisions.md
+  refs/        reference images/clips, sources.json, taste.json (working copy), board.html
   analysis/    footage.json  transcripts/  frames/  sheets/
   preview/     index.html + style frames, grade looks, stills
   build/       generated .jsx, AE project (.aep)
@@ -109,7 +112,7 @@ A one-off generator script hard-codes shots, card text and timings. The plugin s
 ```jsonc
 {
   "format": { "width": 3840, "height": 2160, "fps": 23.976 },
-  "design": "plan/design.json",               // recipe chosen at gate 2 (or a saved design id)
+  "design": "plan/design.json",               // recipe chosen at gate 3 (or a saved design id)
   "voices": [
     { "id": "N1", "file": "voice/narration-1.wav", "at": 8.40, "gain_db": -2.5,
       "words": "analysis/transcripts/narration-1.json" }
@@ -148,7 +151,7 @@ many and has no special status in the code.
 | **Designs** (`designs/<id>/`) | A *recipe*: tokens + one treatment per component that composes primitives | yes — this is what gets created |
 
 Because designs are **data composed of primitives**, Claude can author a brand-new design at
-gate 2 without writing new engine code. A design may add a custom component in JSX when a
+gate 3 without writing new engine code. A design may add a custom component in JSX when a
 look truly needs something the primitives can't express; if that proves reusable, it is
 promoted into a primitive.
 
@@ -160,7 +163,7 @@ promoted into a primitive.
   "mood": ["restrained", "emotional", "premium"],
   "tokens": {
     "palette": { "ink": "#F4F1EA", "accent": "#C9A46A", "shade": "#0E0F12" },
-    "type":    { "headline": "<font>", "body": "<font>", "quote": "<font>" },   // filled at gate 2
+    "type":    { "headline": "<font>", "body": "<font>", "quote": "<font>" },   // filled at gate 3
     "motion":  { "ease": "expo-out", "in": 0.8, "out": 0.5, "settle": false },
     "texture": { "grain": 0.08 }
   },
@@ -172,7 +175,7 @@ promoted into a primitive.
     "end-card":    { "layout": "centered-stack", "media": "blurred-footage", "logo": "tint-ink" },
     "transition":  { "default": "cut", "section": "dip-to-black" }
   },
-  "grade_hint": "soft-contrast-warm",       // suggested starting look for gate 3
+  "grade_hint": "soft-contrast-warm",       // suggested starting look for gate 4
   "sfx_hint":   ["low-whoosh", "soft-hit"]  // suggested sound palette for audio-post
 }
 ```
@@ -181,7 +184,7 @@ Built-in designs are just saved recipes in the same format; they serve as starti
 as regression tests. A design created for one video can be saved into `designs/` with
 "save this design" (without any video-specific text or assets).
 
-### 7.3 How gate 2 creates options
+### 7.3 How gate 3 creates options
 
 1. Read the brief and story: purpose, audience, tone, footage character (bright rooms,
    night event, phone testimony), brand colours and logo.
@@ -190,7 +193,7 @@ as regression tests. A design created for one video can be saved into `designs/`
    name, a one-line rationale and 2–3 font pairings suited to the language(s) in the video.
 3. Render style frames for each direction from the **real footage and real script lines**:
    one caption, one quote/lower third, one title or end card. Quick HTML mockups are fine for
-   the first round; the chosen direction is confirmed with real AE stills before gate 3.
+   the first round; the chosen direction is confirmed with real AE stills before gate 4.
 4. The user can pick, mix ("A's type with B's colours"), or ask for another round.
 5. The chosen recipe is written to `plan/design.json`; fonts are checked before building.
 
@@ -254,7 +257,7 @@ Grade
    Add a small fictional example under `examples/` for anyone else to test with.
 6. **`audio-post`** and **`video-qa`** scripts (ducking, placement, loudness, legibility checks). *(done)*
 7. **`footage-logging`** *(done, Milestone 2a)* — `color-grade` (luma matching, look previews) *(done)*.
-8. **`design-system`** gate 2: generating new directions, style frames, font pairings,
+8. **`design-system`** design gate: generating new directions, style frames, font pairings,
    `preview/index.html`, "save this design". *(done)* Each direction is offered with 2–3
    typefaces (`design-propose --pairings`); every pairing is its own card with its own
    Choose button, so no extra affordance was needed.

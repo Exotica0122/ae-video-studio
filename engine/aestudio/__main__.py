@@ -1,22 +1,29 @@
 """ae-video-studio command line: python3 -m aestudio <command> ..."""
 import argparse
 import json
+import shutil
 import sys
 import time
+from datetime import date
 from pathlib import Path
 
 from .audiopost import AudioPostError, build as build_audio, merge_into
 from .bridge import Bridge, BridgeError
 from .compiler import CompileError, compile_plan
+from .lexicon import LexiconError, load_lexicon, scan as scan_lexicon
+from .credits import CreditsError, add as add_credit, check as check_credits
+from .deliver import DeliverError, deliver, parse_sizes
 from .components.layout import LayoutError
 from .design import DesignError, load_design
 from .doctor import DoctorError, format_report, run_checks
 from .designgen import DesignGenError, Draft, propose, save_design, style_frame_plan
 from .footage import log_footage
-from .grade import (GradeError, exposure_offsets, grade_plan, load_looks, looks_for,
-                     render_look_previews, save_grade)
+from .grade import (GradeError, exposure_offsets, footage_stats, grade_plan, load_looks, look_from_dir,
+                     look_from_taste, looks_for, render_look_previews, save_grade)
 from .fonts import FontError, installed_files, is_installed, load_catalogue
 from .jsx import emit_script, still_script
+from .lint import MIN_FRAGMENT, lint
+from .util import next_free
 from .media import MediaError, probe
 from .ops import OpsError
 from .plan import PlanError, load_plan
@@ -24,13 +31,16 @@ from .project import ProjectError, gates, init_project, next_gate, record_decisi
 from .preview import PreviewError, read_choice, serve, wait_for_choice
 from .render import RenderError, render
 from .styleframe import render_mockups
+from . import taste as tastelib
+from .taste import TasteError
 from .timing import TimingError
-from .videoqa import (QAError, QAReport, decode_check, legibility, mix_loudness,
-                      music_before_voice, section_loudness, sfx_audible, share_copy,
-                      stills as qa_stills, stream_check, write_report)
+from .textcover import clean_plates, text_over_people
+from .videoqa import (QAError, QAReport, decode_check, diff_findings, diff_section, legibility,
+                      mix_loudness, music_before_voice, render_diff, section_loudness, sfx_audible,
+                      share_copy, stills as qa_stills, stream_check, taste_check, write_report)
 from .transcribe import TranscribeError, import_transcript, transcribe as run_transcribe
 
-KNOWN = (PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, json.JSONDecodeError, OSError)
+KNOWN = (LexiconError, CreditsError, DeliverError, PlanError, DesignError, DoctorError, ProjectError, AudioPostError, QAError, GradeError, TimingError, LayoutError, OpsError, CompileError, BridgeError, RenderError, MediaError, TranscribeError, DesignGenError, PreviewError, FontError, TasteError, json.JSONDecodeError, OSError)
 
 
 def _compile(a) -> Path:
@@ -43,10 +53,13 @@ def _compile(a) -> Path:
         project = Path(a.project).resolve()
     else:
         project = plan.project or (plan.root / "build" / f"{plan.name}.aep").resolve()
+    if a.next_version:
+        project = next_free(project)
     project.parent.mkdir(parents=True, exist_ok=True)
-    out = Path(a.out).resolve() if a.out else plan.root / "build" / f"{plan.name}.jsx"
+    out = Path(a.out).resolve() if a.out else plan.root / "build" / f"{project.stem if a.next_version else plan.name}.jsx"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(emit_script(ops, project=str(project)), encoding="utf-8")
+    out.write_text(emit_script(ops, project=str(project), close_open=a.next_version), encoding="utf-8")
+    shutil.copyfile(a.plan, out.with_suffix(".plan.json"))  # the exact plan behind this build, for diffing later
     print(json.dumps({"jsx": str(out), "ops": len(ops), "fonts": sorted(design.fonts())}, ensure_ascii=False))
     return out
 
@@ -57,9 +70,13 @@ def _report_ok(result) -> bool:
 
 def cmd_validate(a):
     plan, design = load_plan(a.plan), load_design(a.design)
+    findings = lint(plan, design, min_fragment=a.min_flash)
+    for f in findings:
+        print(f"warning: {f}", file=sys.stderr)
     print(json.dumps({"name": plan.name, "duration": plan.format.duration, "shots": len(plan.shots), "voices": len(plan.voices),
-                      "graphics": len(plan.graphics), "design": design.id, "fonts": sorted(design.fonts())}, ensure_ascii=False))
-    return 0
+                      "graphics": len(plan.graphics), "design": design.id, "fonts": sorted(design.fonts()),
+                      "lint": [f.to_dict() for f in findings]}, ensure_ascii=False))
+    return 1 if a.strict and findings else 0
 
 
 def cmd_compile(a):
@@ -104,6 +121,33 @@ def cmd_render(a):
     return 0
 
 
+def cmd_deliver(a):
+    name = a.name or (Path(a.master).stem if a.master else a.comp)
+    result = deliver(a.out, name, parse_sizes(a.sizes), master=a.master, project=a.project, comp=a.comp,
+                     lufs=a.lufs, tp=a.tp, allow_running_ae=a.allow_running_ae)
+    print(json.dumps(result, ensure_ascii=False, indent=1))
+    return 0 if result["ok"] else 1
+
+
+def cmd_credits_add(a):
+    when = date.fromisoformat(a.date) if a.date else None
+    path = add_credit(a.dir, a.file, a.url, a.author, a.licence, a.notes, when)
+    print(json.dumps({"credits": str(path), "file": a.file}, ensure_ascii=False))
+    return 0
+
+
+def cmd_credits_check(a):
+    result = check_credits(a.dir, a.plan)
+    print(json.dumps(result, ensure_ascii=False, indent=1))
+    return 1 if result["missing"] else 0
+
+
+def cmd_lexicon_check(a):
+    hits = scan_lexicon(load_lexicon(a.lexicon), a.scripts)
+    print(json.dumps({"lexicon": a.lexicon, "scripts": len(a.scripts), "hits": hits}, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_log_footage(a):
     log = log_footage(a.sources, a.out, every=a.every, max_frames=a.max_frames)
     print(json.dumps({"clips": len(log["clips"]), "audio": len(log["audio"]), "images": len(log["images"]),
@@ -122,7 +166,7 @@ def cmd_transcribe(a):
 
 
 def cmd_import_transcript(a):
-    return _print_transcript(a.out, import_transcript(a.src, a.out))
+    return _print_transcript(a.out, import_transcript(a.src, a.out, a.audio))
 
 
 def _load_log(analysis):
@@ -187,12 +231,21 @@ def _pick(directory, draft_id):
     raise DesignGenError(f"draft '{wanted}' is not in {Path(directory) / 'drafts.json'}")
 
 
+def _taste(path, analysis=None):
+    """--taste, else <project>/plan/taste.json beside --analysis; None when there is none."""
+    if path:
+        return tastelib.load_taste(path)
+    return tastelib.approved_taste(Path(analysis).resolve().parent) if analysis else None
+
+
 def cmd_design_propose(a):
     log = _load_log(a.analysis)
+    taste = _taste(a.taste, a.analysis)
     drafts = propose(a.mood, log=log, scripts=tuple(a.scripts), installed_only=not a.allow_uninstalled_fonts,
-                     limit=a.limit, pairings=a.pairings)
+                     limit=a.limit, pairings=a.pairings, taste=taste)
     index = render_mockups(drafts, log, a.out, script_lines=_script_lines(a.lines))
-    print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index),
+    print(json.dumps({"drafts": [d.id for d in drafts], "index": str(index), "taste": bool(taste),
+                      "refs": {d.id: d.refs for d in drafts if d.refs},
                       "notes": [n for d in drafts for n in d.notes]}, ensure_ascii=False))
     return 0
 
@@ -334,25 +387,66 @@ def cmd_qa(a):
         report.findings += sfx_audible(export, plan["sfx"], spans=spans)
     if a.design:
         report.findings += legibility(load_design(a.design))
-    extras = {}
+    extras, sections, looked_at = {}, {}, {}
     qa_dir = Path(a.out)
+    taste = tastelib.load_taste(a.taste) if a.taste else None
+    made = []
     if a.stills:
         times = [float(t) for t in a.stills.split(",") if t.strip()]
         made = qa_stills(export, times, qa_dir / "stills")
+        looked_at.update(zip(made, times))
         extras["Stills"] = ", ".join(f"`{p.name}`" for p in made)
+    if a.diff:
+        diff = render_diff(a.diff, export)
+        report.findings += diff_findings(diff)
+        mids = sorted({c.mid for c in diff.video + diff.audio})
+        before = qa_stills(a.diff, mids, qa_dir / "stills", prefix="prev")
+        after = qa_stills(export, mids, qa_dir / "stills")
+        changed = {c.mid for c in diff.video}
+        looked_at.update((p, t) for p, t in zip(after, mids) if t in changed)
+        sections["Changes vs previous"] = diff_section(
+            diff, {t: (b.name, n.name) for t, b, n in zip(mids, before, after)})
+    if looked_at and not a.no_people:
+        clean = None
+        if a.plan and a.design:
+            clean = clean_plates(load_plan(a.plan), load_design(a.design), list(looked_at.values()),
+                                 qa_dir / "stills")
+        report.findings += text_over_people(list(looked_at), clean=clean)
+    if taste and taste.get("targets"):
+        if not made:
+            made = qa_stills(export, [round(probe(export).duration * f, 2) for f in (0.2, 0.5, 0.8)],
+                             qa_dir / "stills")
+        report.findings += taste_check(made, taste)
     if a.share:
         copy = share_copy(export, Path(a.share))
         extras["Share copy"] = f"`{copy}` ({copy.stat().st_size / 1e6:.1f} MB)"
-    out = write_report(qa_dir, report, extras)
+    out = write_report(qa_dir, report, extras, sections=sections)
     print(json.dumps({"report": str(out), "failed": len(report.failures),
                       "warnings": len(report.warnings), "checks": len(report.findings)},
                      ensure_ascii=False))
     return 1 if report.failures else 0
 
 
+def cmd_text_cover(a):
+    if a.clean and len(a.clean) != len(a.images):
+        print("error: --clean needs one frame per image", file=sys.stderr)
+        return 2
+    findings = text_over_people(a.images, limit=a.limit, clean=a.clean)
+    print(json.dumps([{"check": f.check, "status": f.status, "detail": f.detail} for f in findings],
+                     ensure_ascii=False, indent=2))
+    return 1 if any(f.bad for f in findings) else 0
+
+
 def cmd_grade_propose(a):
     log = _load_log(a.analysis)
-    looks = looks_for(a.mood, limit=a.limit)
+    taste = _taste(a.taste, a.analysis)
+    goal = (taste or {}).get("targets")
+    if goal:
+        footage = footage_stats(log, Path(a.out))
+        looks = [look_from_taste(goal, footage)] + looks_for(a.mood + tastelib.mood_words(taste),
+                                                             limit=max(1, a.limit - 1))
+    else:
+        looks = looks_for(a.mood, limit=a.limit)
     index = render_look_previews(looks, log, a.out)
     match = exposure_offsets(log)
     print(json.dumps({"looks": [l.id for l in looks], "index": str(index),
@@ -366,7 +460,7 @@ def cmd_grade_choose(a):
     look_id = a.id or choice.get("id")
     if not look_id:
         raise GradeError(f"no look chosen yet in {a.dir} — run grade-preview and click one, or pass --id")
-    look = next((l for l in load_looks() if l.id == look_id), None)
+    look = next((l for l in load_looks() if l.id == look_id), None) or look_from_dir(a.dir, look_id)
     if look is None:
         raise GradeError(f"unknown look '{look_id}'")
     log = _load_log(a.analysis)
@@ -381,12 +475,57 @@ def cmd_grade_choose(a):
     return 0
 
 
+def cmd_taste_add(a):
+    at = [float(t) for t in a.at.split(",") if t.strip()] if a.at else None
+    added = tastelib.add_refs(a.dir, a.sources, role="avoid" if a.avoid else "want", at=at)
+    print(json.dumps({"refs": [{"id": e["id"], "file": e["file"], "role": e["role"], "kind": e["kind"],
+                                "frames": e.get("frames", [])} for e in added]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_taste_measure(a):
+    data = tastelib.measure_refs(a.dir)
+    goal = data["targets"]
+    print(json.dumps({"taste": str(Path(a.dir) / tastelib.WORKING), "refs": len(data["refs"]),
+                      "palette": [s["hex"] for s in goal.get("palette", [])],
+                      "contrast": goal.get("contrast"), "warmth": goal.get("warmth"),
+                      "untraited": [r["id"] for r in data["refs"] if not r["traits"]]}, ensure_ascii=False))
+    return 0
+
+
+def cmd_taste_board(a):
+    board = tastelib.render_board(a.dir)
+    if a.no_serve:
+        print(json.dumps({"board": str(board)}, ensure_ascii=False))
+        return 0
+    server, url = serve(board.parent, port=a.port, page=tastelib.BOARD, handler=tastelib.TasteHandler)
+    url = f"{url}/{tastelib.BOARD}"
+    print(json.dumps({"board": str(board), "url": url, "waiting": not a.no_wait}, ensure_ascii=False), flush=True)
+    if a.no_wait:
+        return 0
+    choice = wait_for_choice(server, board.parent, timeout=a.timeout, poll=a.poll)
+    print(json.dumps({"saved": bool(choice), "approved": (choice or {}).get("approved"),
+                      "rejected": (choice or {}).get("rejected"), "note": (choice or {}).get("note")},
+                     ensure_ascii=False))
+    return 0 if choice else 1
+
+
+def cmd_taste_choose(a):
+    out = tastelib.choose(a.dir, none=a.none, note=a.note)
+    data = tastelib.load_taste(out)
+    print(json.dumps({"taste": str(out), "refs": len(data["refs"]), "approved": data["approved_traits"],
+                      "rejected": data["rejected_traits"]}, ensure_ascii=False))
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="aestudio")
     sub = p.add_subparsers(dest="cmd", required=True)
     v = sub.add_parser("validate")
     v.add_argument("plan")
     v.add_argument("--design", required=True)
+    v.add_argument("--strict", action="store_true", help="exit 1 if the timing lint finds anything")
+    v.add_argument("--min-flash", type=float, default=MIN_FRAGMENT, help="shortest visible shot fragment, in seconds")
     v.set_defaults(fn=cmd_validate)
     for name, fn in (("compile", cmd_compile), ("build", cmd_build)):
         c = sub.add_parser(name)
@@ -394,6 +533,8 @@ def parser():
         c.add_argument("--design", required=True)
         c.add_argument("--name")
         c.add_argument("--project")
+        c.add_argument("--next-version", action="store_true",
+                       help="build into the next unused <name>-vNN.aep, saving and closing whatever project is open")
         c.add_argument("--out")
         c.add_argument("--timeout", type=float, default=900)
         c.set_defaults(fn=fn)
@@ -415,6 +556,35 @@ def parser():
     e.add_argument("--om", default="High Quality")
     e.add_argument("--allow-running-ae", action="store_true")
     e.set_defaults(fn=cmd_render)
+    dl = sub.add_parser("deliver", help="H.264 delivery copies of the master, loudness-normalised and verified")
+    dl.add_argument("--master", help="an existing ProRes master; otherwise render one from --project/--comp")
+    dl.add_argument("--project")
+    dl.add_argument("--comp")
+    dl.add_argument("--name", help="file name stem (default: the master's stem, or the comp name)")
+    dl.add_argument("--sizes", default="4k,1080", help="comma-separated: 4k, master, or a height such as 1080")
+    dl.add_argument("--out", default="exports/final")
+    dl.add_argument("--lufs", type=float, default=-16.0)
+    dl.add_argument("--tp", type=float, default=-2.0)
+    dl.add_argument("--allow-running-ae", action="store_true")
+    dl.set_defaults(fn=cmd_deliver)
+    cr = sub.add_parser("credits", help="maintain assets/CREDITS.md").add_subparsers(dest="credits_cmd", required=True)
+    ca = cr.add_parser("add", help="add or replace the credit for one file")
+    ca.add_argument("file", help="path relative to the project folder")
+    ca.add_argument("--dir", default=".", help="the project folder")
+    ca.add_argument("--url", required=True, help="the item's own page, not a search result")
+    ca.add_argument("--author", required=True)
+    ca.add_argument("--licence", required=True, help="as the user confirmed it, e.g. 'Pexels License'")
+    ca.add_argument("--date", help="download date, YYYY-MM-DD (default: today)")
+    ca.add_argument("--notes", default="")
+    ca.set_defaults(fn=cmd_credits_add)
+    cc = cr.add_parser("check", help="list media in the edit plan with no credit")
+    cc.add_argument("--dir", default=".", help="the project folder")
+    cc.add_argument("--plan", help="default: <dir>/plan/edit.json")
+    cc.set_defaults(fn=cmd_credits_check)
+    lx = sub.add_parser("lexicon-check", help="script lines with words the AI voice mispronounces")
+    lx.add_argument("scripts", nargs="+", help="narration scripts (.md/.txt)")
+    lx.add_argument("--lexicon", default="plan/lexicon.json")
+    lx.set_defaults(fn=cmd_lexicon_check)
     lf = sub.add_parser("log-footage")
     lf.add_argument("sources", nargs="+")
     lf.add_argument("--out", required=True)
@@ -429,6 +599,7 @@ def parser():
     it = sub.add_parser("import-transcript")
     it.add_argument("src")
     it.add_argument("--out", required=True)
+    it.add_argument("--audio", help="the audio it was made from; compile then refuses it if that audio changes")
     it.set_defaults(fn=cmd_import_transcript)
     dp = sub.add_parser("design-propose")
     dp.add_argument("--analysis", required=True)
@@ -440,6 +611,7 @@ def parser():
     dp.add_argument("--pairings", type=int, default=2,
                     help="typefaces offered per direction (spec: 2-3)")
     dp.add_argument("--lines", help="JSON array of real caption lines to typeset in the mockups")
+    dp.add_argument("--taste", help="plan/taste.json (default: the one beside --analysis, if any)")
     dp.set_defaults(fn=cmd_design_propose)
     dv = sub.add_parser("design-preview")
     dv.add_argument("--dir", required=True)
@@ -496,12 +668,22 @@ def parser():
     qa.add_argument("--stills", help="comma-separated times to grab stills at")
     qa.add_argument("--share", help="also write a 1080p share copy to this path")
     qa.add_argument("--target", type=float, default=-16.0)
+    qa.add_argument("--diff", metavar="PREV", help="a previous render: list where this one differs from it")
+    qa.add_argument("--no-people", action="store_true", help="skip the text-over-people check on stills")
+    qa.add_argument("--taste", help="plan/taste.json — compares stills with the references")
     qa.set_defaults(fn=cmd_qa)
+
+    cover = sub.add_parser("text-cover")
+    cover.add_argument("images", nargs="+", help="stills to check for text over faces or people")
+    cover.add_argument("--limit", type=float, default=0.15, help="share of a person box text may cover")
+    cover.add_argument("--clean", nargs="+", help="the same frames without graphics, in the same order")
+    cover.set_defaults(fn=cmd_text_cover)
     gp = sub.add_parser("grade-propose")
     gp.add_argument("--analysis", required=True)
     gp.add_argument("--out", required=True)
     gp.add_argument("--mood", nargs="*", default=[])
     gp.add_argument("--limit", type=int, default=3)
+    gp.add_argument("--taste", help="plan/taste.json (default: the one beside --analysis, if any)")
     gp.set_defaults(fn=cmd_grade_propose)
     gc = sub.add_parser("grade-choose")
     gc.add_argument("--dir", required=True)
@@ -511,6 +693,28 @@ def parser():
     gc.add_argument("--target-luma", type=float, dest="target_luma")
     gc.add_argument("--design-hint", dest="design_hint")
     gc.set_defaults(fn=cmd_grade_choose)
+    ta = sub.add_parser("taste-add")
+    ta.add_argument("sources", nargs="+", help="image or video URLs or files")
+    ta.add_argument("--dir", required=True)
+    ta.add_argument("--avoid", action="store_true", help="these are examples of what the video must not look like")
+    ta.add_argument("--at", help="comma-separated times to sample from a video reference")
+    ta.set_defaults(fn=cmd_taste_add)
+    tm = sub.add_parser("taste-measure")
+    tm.add_argument("--dir", required=True)
+    tm.set_defaults(fn=cmd_taste_measure)
+    tb = sub.add_parser("taste-board")
+    tb.add_argument("--dir", required=True)
+    tb.add_argument("--no-serve", action="store_true", dest="no_serve")
+    tb.add_argument("--no-wait", action="store_true", dest="no_wait")
+    tb.add_argument("--timeout", type=float, default=1800)
+    tb.add_argument("--poll", type=float, default=0.5)
+    tb.add_argument("--port", type=int, default=0)
+    tb.set_defaults(fn=cmd_taste_board)
+    tc = sub.add_parser("taste-choose")
+    tc.add_argument("--dir", required=True)
+    tc.add_argument("--none", action="store_true", help="no references: approve an empty taste")
+    tc.add_argument("--note")
+    tc.set_defaults(fn=cmd_taste_choose)
     return p
 
 

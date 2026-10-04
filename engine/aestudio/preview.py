@@ -30,7 +30,10 @@ def _known_ids(directory) -> set:
         return set()
 
 
-class _Handler(SimpleHTTPRequestHandler):
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+
+
+class ChoiceHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         self._root = Path(directory).resolve()
         super().__init__(*args, directory=str(self._root), **kwargs)
@@ -64,6 +67,8 @@ class _Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.split("?")[0] != "/choose":
             return self._json(404, {"ok": False, "error": "unknown endpoint"})
+        if not self._same_origin():
+            return self._json(403, {"ok": False, "error": "cross-origin request refused"})
         try:
             length = int(self.headers.get("Content-Length") or 0)
             payload = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
@@ -71,25 +76,39 @@ class _Handler(SimpleHTTPRequestHandler):
             return self._json(400, {"ok": False, "error": "body must be JSON"})
         if not isinstance(payload, dict):
             return self._json(400, {"ok": False, "error": "body must be a JSON object"})
-        draft_id = payload.get("id")
-        known = _known_ids(self._root)
-        if not isinstance(draft_id, str) or not draft_id or (known and draft_id not in known):
-            return self._json(400, {"ok": False, "error": f"unknown draft id {draft_id!r}"})
-        note = payload.get("note")
-        if note is not None and not isinstance(note, str):
-            return self._json(400, {"ok": False, "error": "note must be a string"})
-        choice = {"id": draft_id, "note": note or None,
-                  "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        choice, error = self.choose(payload)
+        if error:
+            return self._json(400, {"ok": False, "error": error})
+        choice["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         (self._root / CHOICE_FILE).write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
         return self._json(200, {"ok": True})
 
+    def _same_origin(self) -> bool:
+        # a JSON content type forces a CORS preflight, which this server never answers
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        origin = self.headers.get("Origin")
+        kind = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        return (host in LOCAL_HOSTS and kind == "application/json"
+                and (origin is None or origin == f"http://{self.headers.get('Host')}"))
 
-def serve(directory, port: int = 0, host: str = "127.0.0.1"):
+    def choose(self, payload: dict):
+        """(choice, None) to record it, or (None, error) to refuse it."""
+        draft_id = payload.get("id")
+        known = _known_ids(self._root)
+        if not isinstance(draft_id, str) or not draft_id or (known and draft_id not in known):
+            return None, f"unknown draft id {draft_id!r}"
+        note = payload.get("note")
+        if note is not None and not isinstance(note, str):
+            return None, "note must be a string"
+        return {"id": draft_id, "note": note or None}, None
+
+
+def serve(directory, port: int = 0, host: str = "127.0.0.1", page: str = "index.html", handler=ChoiceHandler):
     directory = Path(directory).resolve()
-    if not (directory / "index.html").exists():
-        raise PreviewError(f"no index.html in {directory} — render the mockups first")
+    if not (directory / page).exists():
+        raise PreviewError(f"no {page} in {directory} — render the page first")
     (directory / CHOICE_FILE).unlink(missing_ok=True)
-    handler = partial(_Handler, directory=str(directory))
+    handler = partial(handler, directory=str(directory))
     try:
         server = ThreadingHTTPServer((host, port), handler)
     except OSError as e:
