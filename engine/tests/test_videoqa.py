@@ -208,5 +208,111 @@ class SfxMeasurementTest(unittest.TestCase):
             self.assertEqual(by_name["sfx:second"].status, "ok", "unmeasurable is not a defect")
 
 
+def _clip(path, seconds=6.0, box_at=None, tone_up_at=None):
+    """A test-pattern clip with a 220 Hz tone, optionally a red box or a louder tone for 0.5 s."""
+    vf = "null" if box_at is None else \
+        f"drawbox=x=20:y=20:w=60:h=40:color=red:t=fill:enable='between(t,{box_at},{box_at + 0.5})'"
+    af = "volume=0.3" if tone_up_at is None else \
+        f"volume='if(between(t,{tone_up_at},{tone_up_at + 0.5}),0.6,0.3)':eval=frame"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size=640x360:rate=25:duration={seconds}",
+                    "-f", "lavfi", "-i", f"sine=frequency=220:duration={seconds}", "-vf", vf, "-af", af,
+                    "-c:v", "libx264", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+                    str(path)], check=True)
+
+
+class ChangedRangesTest(unittest.TestCase):
+    def test_adjacent_samples_over_the_threshold_merge_into_one_range(self):
+        ranges = qa.changed_ranges([(0.0, 0), (0.1, 5), (0.2, 7), (0.3, 0)], 1.0, 0.1)
+        self.assertEqual([(c.start, c.end, c.peak) for c in ranges], [(0.1, 0.3, 7)])
+
+    def test_a_single_quiet_sample_is_bridged(self):
+        ranges = qa.changed_ranges([(1.0, 5), (1.1, 0), (1.2, 5)], 1.0, 0.1)
+        self.assertEqual(len(ranges), 1)
+        self.assertEqual((ranges[0].start, ranges[0].end), (1.0, 1.3))
+
+    def test_a_longer_gap_splits_the_ranges(self):
+        ranges = qa.changed_ranges([(1.0, 5), (1.1, 0), (1.2, 0), (1.3, 5)], 1.0, 0.1)
+        self.assertEqual(len(ranges), 2)
+
+    def test_a_score_equal_to_the_threshold_is_not_a_change(self):
+        self.assertEqual(qa.changed_ranges([(0.0, 1.0)], 1.0, 0.1), [])
+
+    def test_the_midpoint_names_where_to_look(self):
+        self.assertEqual(qa.Change(30.4, 30.8, 1.0).mid, 30.6)
+
+    def test_clock_reads_like_a_timeline(self):
+        self.assertEqual(qa.clock(30.41), "0:30.41")
+        self.assertEqual(qa.clock(75.5), "1:15.50")
+
+
+class DiffReportTest(unittest.TestCase):
+    def test_sections_land_between_problems_and_the_full_table(self):
+        report = qa.QAReport("out.mp4", [qa.Finding("decode", "fail", "broken")])
+        text = qa.format_report(report, 1, sections={"Changes vs previous": ["- Picture 0:30.41–0:30.78"]})
+        self.assertLess(text.index("Needs attention"), text.index("## Changes vs previous"))
+        self.assertLess(text.index("## Changes vs previous"), text.index("All checks"))
+
+    def test_the_section_pairs_each_range_with_its_stills(self):
+        diff = qa.RenderDiff("v1.mp4", "v2.mp4", 60.0, 60.0, video=[qa.Change(30.4, 30.8, 2.5)])
+        lines = qa.diff_section(diff, {30.6: ("prev-0030.60.jpg", "still-0030.60.jpg")})
+        self.assertIn("0:30.40–0:30.80", lines[1])
+        self.assertIn("`prev-0030.60.jpg` → `still-0030.60.jpg`", lines[1])
+
+    def test_no_changes_says_so(self):
+        diff = qa.RenderDiff("v1.mp4", "v2.mp4", 60.0, 60.0)
+        self.assertIn("No picture or sound changes", "\n".join(qa.diff_section(diff)))
+
+    def test_a_skipped_check_is_not_a_problem(self):
+        report = qa.QAReport("out.mp4", [qa.Finding("text-over-people", "skip", "needs macOS")])
+        text = qa.format_report(report, 1)
+        self.assertNotIn("Needs attention", text)
+        self.assertIn("| skipped |", text)
+
+
+@unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
+class RenderDiffTest(unittest.TestCase):
+    def test_identical_renders_have_no_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = Path(tmp) / "a.mp4"
+            _clip(a)
+            diff = qa.render_diff(a, a)
+            self.assertEqual((diff.video, diff.audio), ([], []))
+
+    def test_a_half_second_overlay_is_found_and_nothing_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a.mp4", Path(tmp) / "b.mp4"
+            _clip(a)
+            _clip(b, box_at=2.0)
+            diff = qa.render_diff(a, b)
+            self.assertEqual(len(diff.video), 1, diff.video)
+            self.assertAlmostEqual(diff.video[0].start, 2.0, delta=0.11)
+            self.assertAlmostEqual(diff.video[0].end, 2.5, delta=0.11)
+            self.assertEqual(diff.audio, [], "the soundtrack is unchanged")
+
+    def test_a_sound_only_change_shows_up(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a.mp4", Path(tmp) / "b.mp4"
+            _clip(a)
+            _clip(b, tone_up_at=3.0)
+            diff = qa.render_diff(a, b)
+            self.assertEqual(diff.video, [])
+            self.assertEqual(len(diff.audio), 1, diff.audio)
+            self.assertLessEqual(diff.audio[0].start, 3.0)
+            self.assertGreaterEqual(diff.audio[0].end, 3.5)
+
+    def test_a_longer_render_is_reported_and_the_shared_span_still_compared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a.mp4", Path(tmp) / "b.mp4"
+            _clip(a, seconds=4.0)
+            _clip(b, seconds=6.0, box_at=1.0)
+            diff = qa.render_diff(a, b)
+            self.assertFalse(diff.same_duration)
+            self.assertAlmostEqual(diff.common, 4.0, delta=0.1)
+            self.assertEqual(len(diff.video), 1)
+            by_check = {f.check: f for f in qa.diff_findings(diff)}
+            self.assertEqual(by_check["diff:duration"].status, "warn")
+            self.assertIn("compared the first", by_check["diff:duration"].detail)
+
+
 if __name__ == "__main__":
     unittest.main()

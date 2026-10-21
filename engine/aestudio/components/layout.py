@@ -130,10 +130,12 @@ def fade_ref(group_id, mult=100):
 def text_block(ctx, *, prefix, parent, lines, times, x, y_first, gap, style, align, reveal, opacity=None, t_in=None, t_out=None):
     ops = ctx.ops
     block = Block([], [], [])
+    grouped = align in ("center", "right")
+    anchor = "(x0+x1)/2" if align == "center" else "x1"
     for i, segs in enumerate(lines):
         y = r3(y_first + i * gap)
         seg_parent, origin = parent, [x, y]
-        if align == "center":
+        if grouped:
             line_id = f"{prefix}_L{i + 1}"
             ops.add("group", id=line_id, parent=parent, position=[x, y])
             block.lines.append(line_id)
@@ -150,12 +152,13 @@ def text_block(ctx, *, prefix, parent, lines, times, x, y_first, gap, style, ali
                     tracking=st.get("tracking"), position=list(origin), reveal=dict(reveal, times=times[i][k]),
                     expr=expr or None, **span(t_in, t_out))
             row.append(sid)
-        if align == "center":
+        if grouped:
             f, z = row[0], row[-1]
             ops.add("expr", layer=block.lines[-1], exprs={"position": (
                 STATIC + f"var F=thisComp.layer({js(f)}),Z=thisComp.layer({js(z)});"
                 f"var rf=F.sourceRectAtTime({T_END},false),rz=Z.sourceRectAtTime({T_END},false);"
-                "var x0=F.transform.position[0]+rf.left,x1=Z.transform.position[0]+rz.left+rz.width;[value[0]-(x0+x1)/2,value[1]]")})
+                "var x0=F.transform.position[0]+rf.left,x1=Z.transform.position[0]+rz.left+rz.width;"
+                f"[value[0]-{anchor},value[1]]")})
         block.segments.append(row)
         block.ids.extend(row)
     return block

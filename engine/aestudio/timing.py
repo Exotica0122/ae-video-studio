@@ -1,4 +1,5 @@
 """Transcript timing: absolute voice times and caption-to-speech word alignment."""
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ class Transcript:
     onset: float
     offset: float
     words: list
+    audio_sha256: str = None
 
 
 @dataclass
@@ -33,14 +35,29 @@ def load_transcript(path) -> Transcript:
         raise TimingError(f"bad transcript {path}: {e}") from e
     if not words:
         raise TimingError(f"transcript {path} has no words")
-    return Transcript(float(data.get("onset", words[0][1])), float(data.get("offset", words[-1][2])), words)
+    return Transcript(float(data.get("onset", words[0][1])), float(data.get("offset", words[-1][2])), words,
+                      data.get("audio_sha256"))
+
+
+def check_fresh(voice, tr: Transcript) -> None:
+    """Refuse a transcript made from a different take: its offset would cut the new audio short."""
+    if not tr.audio_sha256:
+        return
+    h = hashlib.sha256()
+    with open(voice.file, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    if h.hexdigest() != tr.audio_sha256:
+        raise TimingError(f"voice {voice.id}: transcript {voice.transcript} was made from a different version of "
+                          f"{voice.file}; re-run `transcribe` or set 'src_out'")
 
 
 def voice_times(voice, tr: Transcript) -> VoiceTimes:
     shift = voice.at - voice.src_in
     end = voice.src_out if voice.src_out is not None else float("inf")
-    kept = [(w, round(s + shift, 3), round(e + shift, 3)) for w, s, e in tr.words
-            if s >= voice.src_in - 1e-6 and e <= end + 1e-6]
+    # a word straddling src_in is clamped, not dropped: dropping it misaligns every caption after it
+    kept = [(w, round(max(s, voice.src_in) + shift, 3), round(e + shift, 3)) for w, s, e in tr.words
+            if e > voice.src_in + 1e-6 and e <= end + 1e-6]
     if not kept:
         raise TimingError(f"voice {voice.id}: no transcript words inside src_in/src_out")
     if voice.src_in == 0 and voice.src_out is None:

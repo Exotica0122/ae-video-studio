@@ -115,7 +115,9 @@ def _layout(count: int, cols: int) -> str:
 
 
 def _raw(src, at: float, size: str, pix_fmt: str, what: str) -> bytes:
-    args = [_binary("ffmpeg"), "-v", "error", "-ss", str(max(0.0, float(at))), "-i", str(src),
+    # some JPEGs decode to nothing after an input seek, even to 0
+    seek = ["-ss", str(float(at))] if float(at) > 0 else []
+    args = [_binary("ffmpeg"), "-v", "error", *seek, "-i", str(src),
             "-frames:v", "1", "-vf", f"scale={size}", "-f", "rawvideo", "-pix_fmt", pix_fmt, "-"]
     result = subprocess.run(args, capture_output=True)
     if result.returncode != 0 or not result.stdout:

@@ -1,6 +1,6 @@
 import unittest
 
-from aestudio.audio import duck_keys, sfx_fade_keys
+from aestudio.audio import duck_keys, level_at, segment_keys, sfx_fade_keys
 
 VOICES = [(8.4, 12.526), (13.646, 19.303), (20.353, 24.236), (24.736, 30.191), (31.191, 37.615),
           (40.515, 47.651), (48.651, 56.918), (57.918, 63.319), (63.819, 69.893), (70.893, 77.799)]
@@ -29,6 +29,20 @@ class AudioTest(unittest.TestCase):
     def test_sfx_fade_none_without_later_voice(self):
         self.assertIsNone(sfx_fade_keys(50.0, -7, [10.0, 50.5]))
 
+
+class SegmentKeysTest(unittest.TestCase):
+    KEYS = [[0, -40], [1, 0], [5, -12], [9, -12], [10, -40]]
+
+    def test_level_at_interpolates_between_keys(self):
+        self.assertEqual(level_at(self.KEYS, 3), -6)
+        self.assertEqual(level_at(self.KEYS, 20), -40)
+
+    def test_a_segment_fades_from_and_to_the_floor_around_the_duck_curve(self):
+        self.assertEqual(segment_keys(self.KEYS, 2, 8, fade_in=1, fade_out=1),
+                         [[2, -40], [3, -6], [5, -12], [7, -12], [8, -40]])
+
+    def test_without_fades_it_starts_and_ends_on_the_curve(self):
+        self.assertEqual(segment_keys(self.KEYS, 3, 7), [[3, -6], [5, -12], [7, -12]])
 
 if __name__ == "__main__":
     unittest.main()

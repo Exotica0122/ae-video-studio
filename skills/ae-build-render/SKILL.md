@@ -18,6 +18,12 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
    - a comp with the build's name exists outside the `ae-video-studio` build folder: refused (rename it or the plan). Only the comp, solids and nulls inside the build folder are replaced.
 3. Premiere Pro is closed. Busy Premiere and After Effects can freeze each other.
 4. `python3 -m aestudio validate plan/edit.json --design <design>` passes, and every font it lists is installed.
+5. Run `validate` before **every** build, not only the first. Its timing lint prints `warning:` lines to stderr and
+   a `lint` list in its JSON: `flash` (a shot visible under 0.5 s, e.g. a full-frame layout ending before the
+   shot under it does), `overlap` (two texts in one screen region at once), `read-time` (text off before it can be
+   read) and `leaves-early` (a caption gone before its voice finishes). Fix each, or tell the user why it stays.
+   `--strict` exits 1 on any warning; `--min-flash <s>` changes the flash threshold. A graphic that hides the
+   footage but is not known to can say `"opaque": true` (or `false` to opt out).
 
 ## Commands
 
@@ -27,12 +33,14 @@ The engine lives in `${CLAUDE_PLUGIN_ROOT}/engine`. Run commands with
 | Only generate the script | `compile plan/edit.json --design <id> --project build/<name>.aep` then `run build/<NAME>.jsx` |
 | Review stills | `still --comp <NAME> --time <s> --out preview/<file>.png` (one per call) |
 | Review or master render | quit After Effects, then `render --project build/<name>.aep --comp <NAME> --out exports/<file>.mov` |
+| Final delivery | `deliver --master exports/<file>.mov --name <name> [--sizes 4k,1080] [--lufs -16] [--tp -2]` (or `--project … --comp …` to render the master first) |
 
 ## Rules
 
 - One bridge job at a time. If a command reports the bridge is busy, wait; never submit in parallel.
 - Read the build report. It is not done unless `ok` is true: fix `expressionErrors`, `missingFonts` or `error` first.
-- Show stills to the user before any long render (docs/design.md gates 4–5).
+- Show stills to the user before any long render (docs/design.md gates 5–6).
 - Renders always use `render` (aerender) with After Effects closed. Never script `renderQueue.render()` for long renders: it locks the After Effects UI and can freeze it.
 - Tell the user before closing After Effects. A forced quit looks like a crash to them.
-- `render` defaults to the "High Quality" output template (ProRes 422 on After Effects 2026). Make H.264 delivery copies from the master with ffmpeg.
+- `render` defaults to the "High Quality" output template (ProRes 422 on After Effects 2026). Make H.264 delivery copies with `deliver`, not by hand.
+- `deliver` writes `exports/final/<name>-4k.mp4` and `<name>-1080p.mp4` (H.264, yuv420p, AAC 320k, faststart, audio through `loudnorm` + `alimiter`), first moving whatever was in `exports/final/` into `previous-vNN/`. It then measures each output's duration, size, loudness and true peak and exits 1 if any is off. Show the user the JSON summary; never hand over a file whose `ok` is false.

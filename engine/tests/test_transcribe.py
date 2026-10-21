@@ -41,6 +41,18 @@ class TranscribeTest(unittest.TestCase):
         self.assertEqual([w[0] for w in tr.words], ["모든", "여정은", "작은"])
         self.assertEqual(tr.onset, 0.1)
 
+    def test_default_command_runs_the_mlx_whisper_executable(self):
+        cmd = transcribe.whisper_command("a.wav", "/tmp/out", template=transcribe.DEFAULT_CMD)
+        self.assertEqual(cmd[:4], ["uvx", "--from", "mlx-whisper", "mlx_whisper"])
+
+    def test_import_with_audio_records_its_digest(self):
+        with tempfile.TemporaryDirectory() as d:
+            audio, src, out = Path(d) / "a.wav", Path(d) / "w.json", Path(d) / "t.json"
+            audio.write_bytes(b"take")
+            src.write_text(json.dumps(WHISPER), encoding="utf-8")
+            result = transcribe.import_transcript(src, out, audio)
+            self.assertEqual(result["audio_sha256"], transcribe.audio_digest(audio))
+
     def test_whisper_command_substitutes(self):
         cmd = transcribe.whisper_command("/a/b c.wav", "/tmp/out", template="mywhisper {audio} --out {outdir}")
         self.assertEqual(cmd, ["mywhisper", "/a/b c.wav", "--out", "/tmp/out"])

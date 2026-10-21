@@ -1,4 +1,4 @@
-"""Gate 3: look previews and per-shot exposure matching.
+"""Gate 4: look previews and per-shot exposure matching.
 
 Two separate jobs that both belong to the grade. Matching evens out shots that were filmed
 under different light, so a cut does not flash; the look is the taste on top of that. The
@@ -10,12 +10,18 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import taste as tastelib
 from .media import MediaError, extract_frame, run
 from .styleframe import PAGE_JS
 
 LOOKS = Path(__file__).resolve().parents[2] / "designs" / "looks.json"
 MAX_MATCH_STOPS = 0.75       # beyond this it is a relight, not a match — flag it instead
 SHOTS_IN_PREVIEW = 4
+NEUTRAL_FOOTAGE = {"luma": 0.45, "contrast": 0.6, "warmth": 0.0, "saturation": 0.3}
+TASTE_LOOK = "from-refs"
+# Lumetri Color property indices, verified in After Effects
+LUMETRI = {"temperature": "15", "tint": "16", "saturation": "17", "exposure": "20",
+           "contrast": "21", "highlights": "22", "shadows": "23"}
 
 
 class GradeError(RuntimeError):
@@ -56,6 +62,29 @@ def load_looks(path=LOOKS) -> list:
     return looks
 
 
+def lumetri_keys(values: dict) -> dict:
+    """Lumetri values keyed by name ("contrast") or index ("21") -> keyed by index."""
+    out = {}
+    for key, value in values.items():
+        key = str(key)
+        if not key.isdigit():
+            if key.lower() not in LUMETRI:
+                raise GradeError(f"unknown Lumetri parameter '{key}' (expected an index or one of {', '.join(LUMETRI)})")
+            key = LUMETRI[key.lower()]
+        out[key] = value
+    return out
+
+
+def look_lumetri(look: dict) -> dict:
+    """A grade.json look as Lumetri values. Its saturation is an offset; Lumetri's is absolute with 100 unchanged."""
+    out = {}
+    for name, index in LUMETRI.items():
+        value = float(look.get(name, 0) or 0) + (100 if name == "saturation" else 0)
+        if value or name == "saturation":
+            out[index] = round(value, 3)
+    return out
+
+
 def looks_for(moods, catalogue=None, limit: int = 3) -> list:
     """Rank looks by how well their mood matches the brief, keeping neutral as a baseline."""
     catalogue = catalogue if catalogue is not None else load_looks()
@@ -66,6 +95,51 @@ def looks_for(moods, catalogue=None, limit: int = 3) -> list:
     if neutral is not None and neutral not in chosen:
         chosen = chosen[:max(1, limit - 1)] + [neutral]
     return chosen
+
+
+def _clamp(value: float, limit: float) -> float:
+    return max(-limit, min(limit, value))
+
+
+def look_from_taste(targets: dict, footage: dict = None) -> Look:
+    """A look that moves the footage's measured contrast, warmth and saturation to the references'."""
+    footage = footage or NEUTRAL_FOOTAGE
+    delta = {k: targets[k]["mean"] - footage[k] for k in NEUTRAL_FOOTAGE}
+    exposure = round(_clamp(math.log2(max(targets["luma"]["mean"], 0.01) / max(footage["luma"], 0.01)), 0.3), 2)
+    contrast = round(_clamp(delta["contrast"] * 100, 25))
+    temperature = round(_clamp(delta["warmth"] * 150, 25))
+    saturation = round(_clamp(delta["saturation"] * 100, 25))
+    preview = (f"exposure=exposure={exposure},eq=contrast={1 + contrast / 100:.2f}:saturation={1 + saturation / 100:.2f},"
+               f"colortemperature=temperature={round(6500 - temperature * 125)}:mix=0.45")
+    note = (f"Built from your references: contrast {footage['contrast']:.2f} → {targets['contrast']['mean']:.2f}, "
+            f"warmth {footage['warmth']:+.2f} → {targets['warmth']['mean']:+.2f}, "
+            f"saturation {footage['saturation']:.2f} → {targets['saturation']['mean']:.2f}.")
+    return Look(id=TASTE_LOOK, name="From your references", mood=["references"], note=note, preview=preview,
+                ae={"exposure": exposure, "contrast": contrast, "temperature": temperature, "tint": 0,
+                    "saturation": saturation, "shadows": 0, "highlights": 0})
+
+
+def footage_stats(log: dict, out_dir) -> dict:
+    """Mean tone of the representative frames, measured the same way as the references."""
+    clips = representative_clips(log)
+    if not clips:
+        return None
+    root = Path(log.get("root") or ".")
+    measured = [tastelib.measure(_frame_for(c, Path(out_dir), root)) for c in clips]
+    return {k: round(sum(m[k] for m in measured) / len(measured), 4) for k in NEUTRAL_FOOTAGE}
+
+
+def look_from_dir(directory, look_id: str):
+    """A look offered on a preview page, including one built from the references."""
+    try:
+        drafts = json.loads((Path(directory) / "drafts.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    entry = next((d for d in drafts if isinstance(d, dict) and d.get("id") == look_id and "ae" in d), None)
+    if entry is None:
+        return None
+    return Look(id=entry["id"], name=entry.get("name", entry["id"]), mood=list(entry.get("mood", [])),
+                note=entry.get("note", ""), preview=entry.get("preview", "null"), ae=dict(entry["ae"]))
 
 
 # ---------------------------------------------------------------- exposure matching
@@ -176,7 +250,7 @@ button.choose:disabled { background:#3a4048; color:var(--muted); cursor:default;
 
 
 def render_look_previews(looks: list, log: dict, out_dir, title: str = "Grade looks") -> Path:
-    """A page of the same shots in each look, with the same click-to-choose contract as gate 2."""
+    """A page of the same shots in each look, with the same click-to-choose contract as the design gate."""
     import html
 
     out_dir = Path(out_dir)
@@ -212,6 +286,7 @@ def render_look_previews(looks: list, log: dict, out_dir, title: str = "Grade lo
             f'{"".join(sections)}<script>{PAGE_JS}</script></body></html>')
     (out_dir / "index.html").write_text(page, encoding="utf-8")
     (out_dir / "drafts.json").write_text(
-        json.dumps([{"id": l.id, "name": l.name} for l in looks], ensure_ascii=False, indent=1),
+        json.dumps([{"id": l.id, "name": l.name, "mood": l.mood, "note": l.note, "preview": l.preview, "ae": l.ae}
+                    for l in looks], ensure_ascii=False, indent=1),
         encoding="utf-8")
     return out_dir / "index.html"

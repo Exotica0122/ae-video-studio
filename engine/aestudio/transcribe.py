@@ -1,4 +1,5 @@
 """Turn Whisper output into the engine's transcript format (word start/end times)."""
+import hashlib
 import json
 import os
 import shlex
@@ -6,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-DEFAULT_CMD = ("uvx mlx-whisper {audio} --model mlx-community/whisper-large-v3-turbo "
+DEFAULT_CMD = ("uvx --from mlx-whisper mlx_whisper {audio} --model mlx-community/whisper-large-v3-turbo "
                "--word-timestamps True --output-dir {outdir} --output-format json")
 MANUAL = ("transcribe it yourself (any Whisper build with word timestamps) and run "
           "`python3 -m aestudio import-transcript <json> --out <out>`")
@@ -41,20 +42,31 @@ def _words(data: dict) -> list:
     return words
 
 
-def to_engine(data: dict) -> dict:
+def audio_digest(path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def to_engine(data: dict, audio=None) -> dict:
     words = _words(data)
     if not words:
         raise TranscribeError("no words with timings in this transcript; " + MANUAL)
-    return {"onset": words[0][1], "offset": words[-1][2], "words": words}
+    out = {"onset": words[0][1], "offset": words[-1][2], "words": words}
+    if audio is not None:
+        out["audio_sha256"] = audio_digest(audio)
+    return out
 
 
-def import_transcript(src_json, out_json) -> dict:
+def import_transcript(src_json, out_json, audio=None) -> dict:
     src, out = Path(src_json), Path(out_json)
     try:
         data = json.loads(src.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
         raise TranscribeError(f"cannot read {src}: {e}") from e
-    result = to_engine(data)
+    result = to_engine(data, audio)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     return result
@@ -72,4 +84,4 @@ def transcribe(audio, out_json, template=None) -> dict:
             tail = (result.stderr or result.stdout or "").strip().splitlines()[-3:]
             raise TranscribeError("transcription command failed: " + " ".join(cmd) + "\n  "
                                   + " / ".join(tail) + f"\n  {MANUAL}")
-        return import_transcript(produced[0], out_json)
+        return import_transcript(produced[0], out_json, audio)

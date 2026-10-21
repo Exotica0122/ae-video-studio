@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aestudio.audio import duck_keys
+from aestudio.audio import duck_keys, segment_keys
 from aestudio.compiler import CompileError, compile_plan
 from aestudio.components import REGISTRY
 from aestudio.design import load_design
@@ -82,6 +82,50 @@ class CompilerTest(unittest.TestCase):
         self.assertEqual(ctx.px(100), 50.0)
         self.assertEqual(ctx.size("label"), 32.0)
 
+
+class MusicSegmentsCompileTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _ops(self, music):
+        build_plan(self.root)
+        path = self.root / "edit.json"
+        data = json.loads(path.read_text())
+        data["music"] = music
+        path.write_text(json.dumps(data))
+        return {o.get("id"): o for o in compile_plan(load_plan(path), load_design("notebook"))}
+
+    def test_each_segment_is_its_own_layer_with_fades_over_the_shared_duck(self):
+        ops = self._ops([{"file": "m.wav", "end": 12, "fade_out": 2, "gain_db": -6},
+                         {"file": "m.wav", "start": 10, "src_in": 4, "fade_in": 2, "gain_db": -3}])
+        self.assertNotIn("MUSIC", ops)
+        a, b = ops["MUSIC_01"], ops["MUSIC_02"]
+        self.assertEqual((a["start"], a["end"], b["start"], b["end"], b["src_in"]), (0.0, 12.0, 10.0, 20.0, 4.0))
+        self.assertNotIn("src_in", a)
+        duck = duck_keys([(2.1, 3.0), (9.2, 9.7)], 20.0)
+        self.assertEqual(a["levels"][0], [0, -46])
+        self.assertEqual(a["levels"][-1], [12, -46])
+        self.assertEqual(b["levels"][0], [10, -43])
+        self.assertEqual(b["levels"][-1], [20, -43])
+        self.assertTrue(all(10 <= t <= 20 for t, _ in b["levels"]))
+        inner = [[t, db - 6] for t, db in duck if 0 < t < 10]
+        self.assertEqual([k for k in a["levels"] if 0 < k[0] < 10], inner)
+
+    def test_ducking_covers_spans_from_every_segment(self):
+        ops = self._ops([{"file": "m.wav", "end": 10, "spans": [[5, 6]]}, {"file": "m.wav", "start": 10}])
+        expected = segment_keys(duck_keys([(2.1, 3.0), (5, 6), (9.2, 9.7)], 20.0), 10, 20)
+        self.assertEqual(ops["MUSIC_02"]["levels"], expected)
+
+    def test_a_single_object_compiles_exactly_as_before(self):
+        ops = self._ops({"file": "m.wav", "gain_db": -6, "duck": {"under_voice": -14}})
+        expected = [[t, round(db - 6, 3)] for t, db in duck_keys([(2.1, 3.0), (9.2, 9.7)], 20.0, under_voice=-14)]
+        self.assertEqual(ops["MUSIC"]["levels"], expected)
+        self.assertEqual((ops["MUSIC"]["start"], ops["MUSIC"]["end"]), (0.0, 20.0))
+        self.assertNotIn("src_in", ops["MUSIC"])
 
 if __name__ == "__main__":
     unittest.main()

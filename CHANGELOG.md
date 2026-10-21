@@ -7,6 +7,43 @@ or design format.
 
 ## [Unreleased]
 
+Lessons from a full church promo edit: 18 renders and 10 QA rounds.
+
+### Added
+
+- **Taste gate (new gate 2):** collect reference images or clips (`taste-add`, including ones to
+  avoid), measure their palette, contrast, warmth and pace (`taste-measure`), then approve traits on
+  a mood board (`taste-board`, `taste-choose`). Design proposals, grade looks and QA all read
+  `plan/taste.json`. Later gates move up by one; existing decision logs still read correctly.
+- **Timing lint in `validate`:** flash frames (a shot visible for a moment between full-frame
+  graphics), text that overlaps in the same region, text too short to read, and captions that
+  leave before their voice. `--strict` fails on any warning.
+- **`qa --diff PREV`:** lists the time ranges where picture or sound changed since a previous
+  render, with before and after stills.
+- **Text over people:** `qa` (and `text-cover`) uses the macOS Vision framework to flag text
+  covering faces or people.
+- **`deliver`:** H.264 copies at 4K and 1080p with loudness normalised to −16 LUFS and −2 dBTP,
+  checked after encoding. Previous deliveries move to `previous-vNN/`.
+- **Music segments:** `music` can be a list of tracks, each with its own fades. Ducking applies to all.
+- **`credits add` / `credits check`:** keep `assets/CREDITS.md` and flag media that has no credit.
+- **`lexicon-check`:** scans narration scripts for words that TTS mispronounces.
+- **Block components:** positioned text blocks, word chips, whole-line subtitles, a fade from
+  black, label-scrim captions, a light-rays title page, a date-row end card with a tinted logo,
+  and an accent-band layout with CRT and split variants.
+- **`design_size`:** one plan renders at any resolution.
+- **Named grade keys:** `"contrast"` and `"temperature"` instead of numeric Lumetri indices, plus
+  `"grade": {"file": "grade.json"}`.
+- **`build --next-version`:** builds into the next free `name-vNN.aep`, closes the open project,
+  and keeps a copy of the plan beside the build.
+
+### Fixed
+
+- **Whisper:** the default command now runs the `mlx_whisper` executable.
+- **Stale transcripts:** transcripts record a hash of their audio. Compile refuses a transcript
+  whose audio has changed, instead of cutting the voice short.
+- **Trimmed voices:** a word that straddles `src_in` is clamped rather than dropped, so captions
+  after it stay aligned.
+
 ## [0.2.0] - 2026-09-22
 
 First public release. The flow runs end to end, from footage and a brief to a 4K master,

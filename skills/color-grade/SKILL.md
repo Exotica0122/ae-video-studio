@@ -1,6 +1,6 @@
 ---
 name: color-grade
-description: Run the grade gate for an ae-video-studio video — match exposure across shots that were filmed under different light, show 3 looks on the video's own footage side by side, and record the choice as plan/grade.json. Use at gate 3, after the design is chosen and before building, or when shots do not cut together.
+description: Run the grade gate for an ae-video-studio video — match exposure across shots that were filmed under different light, show 3 looks on the video's own footage side by side, and record the choice as plan/grade.json. Use at gate 4, after the design is chosen and before building, or when shots do not cut together.
 ---
 
 # Choose the look
@@ -12,6 +12,12 @@ PYTHONPATH=... python3 -m aestudio design-preview --dir <project>/preview/grade 
 PYTHONPATH=... python3 -m aestudio grade-choose --dir <project>/preview/grade \
     --analysis <project>/analysis --out <project>/plan/grade.json
 ```
+
+When `plan/taste.json` exists beside `--analysis` (or with `--taste <file>`), the first look on the page
+is **From your references**: the footage's measured contrast, warmth and saturation moved to the
+references' targets, each clamped to ±25 so it stays a grade. Approved `mood:` traits join `--mood`.
+Say how far the footage is from the references (the look's note prints both numbers). Without a taste
+file the page is unchanged.
 
 `design-preview` is the same click-to-choose server the design gate uses; the grade page follows the
 same contract, so there is no second server to learn.
@@ -29,6 +35,12 @@ ffmpeg approximations rendered on **4 shots spread across the brightness range o
 a look is judged on the hard shots and not only on the flattering one. `plan/grade.json` carries
 neutral parameters (exposure, contrast, temperature, tint, saturation, shadows, highlights) that the
 builder applies for real in After Effects.
+
+Point the edit plan at it with `"grade": {"file": "grade.json"}`: the look becomes every shot's base
+Lumetri and each shot without its own `exposure` takes its matching offset. Lumetri values in the plan
+(`grade.lumetri`, a shot's `lumetri`) may be keyed by name — `temperature`, `tint`, `saturation`,
+`exposure`, `contrast`, `highlights`, `shadows` — or by index (`"21"`), and override the look. In grade.json
+`saturation` is an offset (`-10`); in `lumetri` it is Lumetri's own value (`90`, where 100 is unchanged).
 
 ## Rules
 
